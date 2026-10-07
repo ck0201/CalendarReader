@@ -31,11 +31,18 @@
       </div>
       
       <div id="auth-actions" class="auth-actions hidden">
-        <span class="status-badge connected">
-          <span class="status-dot"></span> Google Connected
-        </span>
-        <button id="logout-btn" class="btn btn-subtle" title="Disconnect Google Calendar">
-          Disconnect
+        <div id="accounts-list" class="accounts-list">
+          <!-- Populated dynamically with connected account chips -->
+        </div>
+        <a id="connect-another-btn" href="/api/auth/login?prompt=select_account" class="btn btn-subtle btn-sm" title="Connect another Google account">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+          Add Account
+        </a>
+        <button id="logout-btn" class="btn btn-subtle btn-sm" title="Disconnect all Google accounts">
+          Disconnect All
         </button>
       </div>
     </div>
@@ -82,6 +89,9 @@
     <!-- State 2: Insights Dashboard (Authenticated) -->
     <section id="dashboard-view" class="dashboard-section hidden">
       <div class="container">
+        <!-- Account Reauth Notice Banner -->
+        <div id="reauth-notice" class="reauth-banner hidden"></div>
+
         <!-- Dashboard Header & Range Controls -->
         <div class="dashboard-controls-bar">
           <div>

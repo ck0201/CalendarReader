@@ -9,4 +9,5 @@ public class CalendarTask
     public bool IsCompleted { get; set; }
     public string? Description { get; set; }
     public string? HtmlLink { get; set; }
+    public string AccountEmail { get; set; } = string.Empty;
 }

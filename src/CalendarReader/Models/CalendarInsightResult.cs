@@ -50,4 +50,5 @@ public class AuthStatusResponse
     public bool IsAuthenticated { get; set; }
     public bool IsConfigured { get; set; }
     public string? MissingConfigMessage { get; set; }
+    public List<ConnectedAccount> Accounts { get; set; } = [];
 }

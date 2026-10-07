@@ -15,6 +15,7 @@ public class CalendarEvent
     public bool IsTrainJourney { get; set; }
     public string? Status { get; set; }
     public string? HtmlLink { get; set; }
+    public string AccountEmail { get; set; } = string.Empty;
 
     public TimeSpan Duration => End > Start ? End - Start : TimeSpan.Zero;
 
@@ -150,7 +151,8 @@ public class CalendarEvent
             IsAllDay = IsAllDay,
             IsCompleted = Status == "completed" || Title.Contains("[x]", StringComparison.OrdinalIgnoreCase),
             Description = Description,
-            HtmlLink = HtmlLink
+            HtmlLink = HtmlLink,
+            AccountEmail = AccountEmail
         };
     }
 }

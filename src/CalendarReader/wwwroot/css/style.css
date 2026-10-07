@@ -136,6 +136,79 @@ body {
   box-shadow: 0 0 8px var(--accent-success);
 }
 
+.accounts-list {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.account-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+  font-weight: 500;
+  padding: 0.25rem 0.6rem;
+  border-radius: var(--radius-full);
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  color: var(--text-main);
+  transition: var(--transition);
+}
+
+.account-chip.connected {
+  border-color: rgba(16, 185, 129, 0.3);
+}
+
+.account-chip.reauth {
+  border-color: rgba(245, 158, 11, 0.4);
+  background-color: var(--accent-warning-bg);
+  color: var(--accent-warning);
+}
+
+.account-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background-color: var(--accent-success);
+}
+
+.account-dot.reauth {
+  background-color: var(--accent-warning);
+  box-shadow: 0 0 6px var(--accent-warning);
+}
+
+.account-email {
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-disconnect-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  font-size: 0.95rem;
+  line-height: 1;
+  padding: 0;
+  margin-left: 0.15rem;
+  transition: var(--transition);
+}
+
+.account-disconnect-btn:hover {
+  background-color: rgba(239, 68, 68, 0.2);
+  color: var(--accent-danger);
+}
+
 /* -------------------------------------------------------------
    Buttons
    ------------------------------------------------------------- */
@@ -183,6 +256,13 @@ body {
   background-color: var(--bg-surface);
   color: var(--text-main);
   border-color: var(--border-subtle);
+}
+
+.btn-sm {
+  padding: 0.35rem 0.75rem;
+  font-size: 0.8rem;
+  font-weight: 500;
+  border-radius: var(--radius-sm);
 }
 
 /* -------------------------------------------------------------
@@ -662,6 +742,38 @@ body {
   background-color: var(--accent-success-bg);
   color: var(--accent-success);
   border: 1px solid rgba(16, 185, 129, 0.25);
+}
+
+.tag-account {
+  background-color: rgba(148, 163, 184, 0.1);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-subtle);
+  text-transform: none;
+  font-weight: 500;
+  max-width: 170px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-account {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-left: 0.5rem;
+}
+
+.reauth-banner {
+  background-color: var(--accent-warning-bg);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  color: var(--accent-warning);
+  padding: 0.75rem 1.25rem;
+  border-radius: var(--radius-md);
+  margin-bottom: 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  font-size: 0.875rem;
 }
 
 /* Loading State */

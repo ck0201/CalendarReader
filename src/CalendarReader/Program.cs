@@ -1,5 +1,6 @@
 using CalendarReader.Models;
 using CalendarReader.Services;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -29,7 +30,9 @@ builder.Services.Configure<GoogleAuthConfig>(options =>
 });
 
 // Register Application Services
-builder.Services.AddSingleton<ITokenStore, InMemoryTokenStore>();
+builder.Services.AddDataProtection();
+builder.Services.AddHttpClient();
+builder.Services.AddSingleton<IAccountTokenStore, SqliteAccountTokenStore>();
 builder.Services.AddSingleton<ICalendarAnalysisService, CalendarAnalysisService>();
 builder.Services.AddScoped<IGoogleCalendarService, GoogleCalendarService>();
 
@@ -64,11 +67,19 @@ app.UseStaticFiles();
 // Authentication Endpoints
 // -------------------------------------------------------------
 
-app.MapGet("/api/auth/status", (HttpContext context, ITokenStore tokenStore, IOptions<GoogleAuthConfig> config) =>
+app.MapGet("/api/auth/status", async (
+    HttpContext context,
+    IAccountTokenStore tokenStore,
+    IOptions<GoogleAuthConfig> config,
+    CancellationToken ct) =>
 {
     var cfg = config.Value;
     var sessionId = context.Request.Cookies[SessionCookieName];
-    var isAuthenticated = !string.IsNullOrEmpty(sessionId) && tokenStore.HasToken(sessionId);
+    var accounts = !string.IsNullOrEmpty(sessionId)
+        ? await tokenStore.GetAccountsAsync(sessionId, ct)
+        : (IReadOnlyList<ConnectedAccount>)[];
+
+    var isAuthenticated = accounts.Any(a => !a.RequiresReauth);
     var isConfigured = cfg.IsConfigured;
 
     return Results.Ok(new AuthStatusResponse
@@ -77,11 +88,16 @@ app.MapGet("/api/auth/status", (HttpContext context, ITokenStore tokenStore, IOp
         IsConfigured = isConfigured,
         MissingConfigMessage = isConfigured
             ? null
-            : "Google OAuth is not configured. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET to enable Google connection."
+            : "Google OAuth is not configured. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET to enable Google connection.",
+        Accounts = accounts.ToList()
     });
 });
 
-app.MapGet("/api/auth/login", (HttpContext context, IGoogleCalendarService calendarService, IOptions<GoogleAuthConfig> config) =>
+app.MapGet("/api/auth/login", (
+    HttpContext context,
+    IGoogleCalendarService calendarService,
+    IOptions<GoogleAuthConfig> config,
+    string? prompt) =>
 {
     if (!config.Value.IsConfigured)
     {
@@ -93,7 +109,7 @@ app.MapGet("/api/auth/login", (HttpContext context, IGoogleCalendarService calen
     }
 
     var sessionId = GetOrCreateSessionId(context);
-    var authUrl = calendarService.GetAuthorizationUrl(sessionId);
+    var authUrl = calendarService.GetAuthorizationUrl(sessionId, prompt);
     return Results.Redirect(authUrl);
 });
 
@@ -134,11 +150,37 @@ app.MapGet("/api/auth/callback", async (
     return Results.Redirect("/");
 });
 
-app.MapPost("/api/auth/logout", (HttpContext context, ITokenStore tokenStore) =>
+app.MapDelete("/api/auth/accounts/{id}", async (
+    HttpContext context,
+    string id,
+    IGoogleCalendarService calendarService,
+    IAccountTokenStore tokenStore,
+    CancellationToken ct) =>
 {
-    if (context.Request.Cookies.TryGetValue(SessionCookieName, out var sessionId))
+    var sessionId = context.Request.Cookies[SessionCookieName];
+    if (string.IsNullOrEmpty(sessionId))
     {
-        tokenStore.RemoveToken(sessionId);
+        return Results.Unauthorized();
+    }
+
+    var success = await calendarService.DisconnectAccountAsync(sessionId, id, ct);
+    var remaining = await tokenStore.GetAccountsAsync(sessionId, ct);
+    if (remaining.Count == 0)
+    {
+        context.Response.Cookies.Delete(SessionCookieName);
+    }
+
+    return Results.Ok(new { success });
+});
+
+app.MapPost("/api/auth/logout", async (
+    HttpContext context,
+    IGoogleCalendarService calendarService,
+    CancellationToken ct) =>
+{
+    if (context.Request.Cookies.TryGetValue(SessionCookieName, out var sessionId) && !string.IsNullOrWhiteSpace(sessionId))
+    {
+        await calendarService.DisconnectAllAccountsAsync(sessionId, ct);
     }
     context.Response.Cookies.Delete(SessionCookieName);
     return Results.Ok(new { success = true });
@@ -154,11 +196,11 @@ app.MapGet("/api/calendar/events", async (
     DateTimeOffset? end,
     string? filter,
     IGoogleCalendarService calendarService,
-    ITokenStore tokenStore,
+    IAccountTokenStore tokenStore,
     CancellationToken ct) =>
 {
     var sessionId = context.Request.Cookies[SessionCookieName];
-    if (string.IsNullOrEmpty(sessionId) || !tokenStore.HasToken(sessionId))
+    if (string.IsNullOrEmpty(sessionId) || !await tokenStore.HasAnyAccountAsync(sessionId, ct))
     {
         return Results.Unauthorized();
     }
@@ -199,11 +241,11 @@ app.MapGet("/api/calendar/tasks", async (
     DateTimeOffset? start,
     DateTimeOffset? end,
     IGoogleCalendarService calendarService,
-    ITokenStore tokenStore,
+    IAccountTokenStore tokenStore,
     CancellationToken ct) =>
 {
     var sessionId = context.Request.Cookies[SessionCookieName];
-    if (string.IsNullOrEmpty(sessionId) || !tokenStore.HasToken(sessionId))
+    if (string.IsNullOrEmpty(sessionId) || !await tokenStore.HasAnyAccountAsync(sessionId, ct))
     {
         return Results.Unauthorized();
     }
@@ -251,11 +293,11 @@ app.MapGet("/api/calendar/insights", async (
     DateTimeOffset? end,
     IGoogleCalendarService calendarService,
     ICalendarAnalysisService analysisService,
-    ITokenStore tokenStore,
+    IAccountTokenStore tokenStore,
     CancellationToken ct) =>
 {
     var sessionId = context.Request.Cookies[SessionCookieName];
-    if (string.IsNullOrEmpty(sessionId) || !tokenStore.HasToken(sessionId))
+    if (string.IsNullOrEmpty(sessionId) || !await tokenStore.HasAnyAccountAsync(sessionId, ct))
     {
         return Results.Unauthorized();
     }

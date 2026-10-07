@@ -9,6 +9,8 @@
   const landingView = document.getElementById('landing-view');
   const dashboardView = document.getElementById('dashboard-view');
   const authActions = document.getElementById('auth-actions');
+  const accountsList = document.getElementById('accounts-list');
+  const reauthNotice = document.getElementById('reauth-notice');
   const logoutBtn = document.getElementById('logout-btn');
   const alertBanner = document.getElementById('alert-banner');
   const connectBtn = document.getElementById('connect-btn');
@@ -38,6 +40,7 @@
   let currentEvents = [];
   let currentEventFilter = 'all';
   let upcomingTrainJourneysCache = null;
+  let connectedAccounts = [];
 
   // -------------------------------------------------------------
   // Helpers
@@ -109,6 +112,80 @@
     return `${date.toLocaleDateString([], dateOptions)}, ${date.toLocaleTimeString([], timeOptions)}`;
   }
 
+  function renderAccountsList() {
+    if (!accountsList) return;
+    accountsList.innerHTML = '';
+
+    let hasReauth = false;
+    const reauthEmails = [];
+
+    connectedAccounts.forEach((acc) => {
+      const chip = document.createElement('div');
+      chip.className = `account-chip ${acc.requiresReauth ? 'reauth' : 'connected'}`;
+
+      const dot = document.createElement('span');
+      dot.className = `account-dot ${acc.requiresReauth ? 'reauth' : ''}`;
+
+      const emailSpan = document.createElement('span');
+      emailSpan.className = 'account-email';
+      emailSpan.textContent = acc.email;
+      emailSpan.title = acc.displayName ? `${acc.displayName} (${acc.email})` : acc.email;
+
+      const disconnectBtn = document.createElement('button');
+      disconnectBtn.className = 'account-disconnect-btn';
+      disconnectBtn.innerHTML = '&times;';
+      disconnectBtn.title = `Disconnect ${acc.email}`;
+      disconnectBtn.setAttribute('aria-label', `Disconnect ${acc.email}`);
+      disconnectBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        disconnectAccount(acc.accountId, acc.email);
+      });
+
+      chip.appendChild(dot);
+      chip.appendChild(emailSpan);
+      chip.appendChild(disconnectBtn);
+      accountsList.appendChild(chip);
+
+      if (acc.requiresReauth) {
+        hasReauth = true;
+        reauthEmails.push(acc.email);
+      }
+    });
+
+    if (reauthNotice) {
+      if (hasReauth) {
+        reauthNotice.innerHTML = `
+          <div><strong>${escapeHtml(reauthEmails.join(', '))}</strong> requires re-authorization. Reconnect to restore all events.</div>
+          <a href="/api/auth/login?prompt=select_account" class="btn btn-subtle btn-sm">Reconnect</a>
+        `;
+        reauthNotice.classList.remove('hidden');
+      } else {
+        reauthNotice.classList.add('hidden');
+        reauthNotice.innerHTML = '';
+      }
+    }
+  }
+
+  async function disconnectAccount(accountId, email) {
+    if (!confirm(`Disconnect Google account: ${email}?`)) {
+      return;
+    }
+
+    try {
+      upcomingTrainJourneysCache = null;
+      const res = await fetch(`/api/auth/accounts/${encodeURIComponent(accountId)}`, { method: 'DELETE' });
+      if (res.ok) {
+        showAlert(`Disconnected ${email}.`, 'info');
+        await checkAuthStatus();
+      } else {
+        showAlert(`Failed to disconnect ${email}.`, 'error');
+      }
+    } catch (err) {
+      console.error('Failed to disconnect account:', err);
+      showAlert(`Error disconnecting account: ${err.message}`, 'error');
+    }
+  }
+
   // -------------------------------------------------------------
   // Data Fetching & Rendering
   // -------------------------------------------------------------
@@ -141,6 +218,9 @@
           showAlert('Google OAuth credentials must be configured before connecting.', 'error');
         };
       }
+
+      connectedAccounts = data.accounts || [];
+      renderAccountsList();
 
       if (data.isAuthenticated) {
         showDashboard();
@@ -179,7 +259,7 @@
 
       if (res.status === 401) {
         showLanding();
-        showAlert('Your session has expired. Please reconnect your Google Calendar.', 'warning');
+        showAlert('Your session has expired or no accounts are connected. Please connect Google Calendar.', 'warning');
         return;
       }
 
@@ -293,12 +373,17 @@
         ? `<div class="task-meta"><span class="task-due">${escapeHtml(formatTaskDue(task))}</span></div>`
         : '';
 
+      const accountHtml = (task.accountEmail && connectedAccounts.length > 1)
+        ? `<span class="task-account">${escapeHtml(task.accountEmail)}</span>`
+        : '';
+
       row.innerHTML = `
         <div class="task-info">
           <div class="task-checkbox${task.isCompleted ? ' completed' : ''}" title="${task.isCompleted ? 'Completed' : 'Pending'}">
             ${checkmark}
           </div>
           <span class="task-title${task.isCompleted ? ' completed' : ''}">${escapeHtml(task.title)}</span>
+          ${accountHtml}
         </div>
         ${dueHtml}
       `;
@@ -389,6 +474,9 @@
       row.className = 'event-row';
 
       let tagsHtml = '';
+      if (ev.accountEmail && connectedAccounts.length > 1) {
+        tagsHtml += `<span class="tag tag-account" title="Account: ${escapeHtml(ev.accountEmail)}">${escapeHtml(ev.accountEmail)}</span>`;
+      }
       if (ev.isTrainJourney) {
         tagsHtml += '<span class="tag tag-train">Train Journey</span>';
       }
@@ -448,12 +536,17 @@
   });
 
   logoutBtn.addEventListener('click', async () => {
+    if (connectedAccounts.length > 0 && !confirm('Are you sure you want to disconnect all Google accounts?')) {
+      return;
+    }
     upcomingTrainJourneysCache = null;
     try {
       await fetch('/api/auth/logout', { method: 'POST' });
     } catch (err) {
       console.error('Logout error:', err);
     }
+    connectedAccounts = [];
+    renderAccountsList();
     showLanding();
     hideAlert();
   });

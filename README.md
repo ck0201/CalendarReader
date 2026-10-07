@@ -59,10 +59,11 @@ CalendarReader/
 │       │   ├── CalendarEvent.cs
 │       │   ├── CalendarInsightResult.cs
 │       │   ├── CalendarTask.cs
+│       │   ├── ConnectedAccount.cs
 │       │   └── GoogleAuthConfig.cs
 │       ├── Services/
-│       │   ├── ITokenStore.cs
-│       │   ├── InMemoryTokenStore.cs
+│       │   ├── IAccountTokenStore.cs
+│       │   ├── SqliteAccountTokenStore.cs
 │       │   ├── IGoogleCalendarService.cs
 │       │   ├── GoogleCalendarService.cs
 │       │   ├── ICalendarAnalysisService.cs
@@ -77,7 +78,9 @@ CalendarReader/
     └── CalendarReader.Tests/
         ├── CalendarReader.Tests.csproj
         ├── CalendarAnalysisServiceTests.cs
-        └── GoogleAuthConfigTests.cs
+        ├── GoogleAuthConfigTests.cs
+        ├── MultiAccountCalendarAggregationTests.cs
+        └── SqliteAccountTokenStoreTests.cs
 ```
 
 ---
