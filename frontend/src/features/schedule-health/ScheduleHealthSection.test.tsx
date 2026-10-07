@@ -77,4 +77,62 @@ describe('ScheduleHealthSection', () => {
     expect(screen.getAllByText(/30m/i).length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText('Daily Conflict Timeline')).toBeInTheDocument();
   });
+
+  it('renders cross-account badge and individual account chips when isCrossAccount is true', () => {
+    const health: ScheduleHealthInfo = {
+      totalConflicts: 1,
+      totalConflictDuration: '00:30:00',
+      formattedConflictDuration: '30m',
+      affectedEventsCount: 2,
+      conflictFreeDaysCount: 6,
+      mostConflictedDay: 'Tuesday',
+      hasTodayConflict: false,
+      crossAccountConflictsCount: 1,
+      sameAccountConflictsCount: 0,
+      conflicts: [
+        {
+          id: 'cross-conflict-1',
+          eventA: {
+            id: 'pers-1',
+            title: 'Dentist Appointment',
+            start: '2026-10-06T10:00:00Z',
+            end: '2026-10-06T11:00:00Z',
+            htmlLink: null,
+            accountEmail: 'personal@gmail.com',
+          },
+          eventB: {
+            id: 'work-1',
+            title: 'Client Pitch',
+            start: '2026-10-06T10:30:00Z',
+            end: '2026-10-06T11:30:00Z',
+            htmlLink: null,
+            accountEmail: 'work@gmail.com',
+          },
+          overlapStart: '2026-10-06T10:30:00Z',
+          overlapEnd: '2026-10-06T11:00:00Z',
+          overlapDuration: '00:30:00',
+          formattedOverlapDuration: '30m',
+          accountEmail: 'Multiple Accounts',
+          isCrossAccount: true,
+        },
+      ],
+      suggestions: [
+        {
+          type: 'conflict',
+          severity: 'warning',
+          title: 'Cross-Account Double Booking',
+          description: '"Dentist Appointment" (personal@gmail.com) overlaps with "Client Pitch" (work@gmail.com) by 30m.',
+        },
+      ],
+    };
+
+    render(<ScheduleHealthSection health={health} isMultiAccount={true} />);
+
+    expect(screen.getByText('Cross-Account')).toBeInTheDocument();
+    expect(screen.getByText('Cross-Account Double Booking')).toBeInTheDocument();
+    expect(screen.getAllByText('personal@gmail.com').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('work@gmail.com').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('Dentist Appointment').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('Client Pitch').length).toBeGreaterThanOrEqual(1);
+  });
 });

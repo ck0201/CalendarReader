@@ -20,13 +20,24 @@ export const ConflictCard: React.FC<ConflictCardProps> = ({
           <span>{conflict.eventB.title}</span>
         </div>
         <div className="conflict-pair-times">
-          <span>{formatConflictTime(conflict.eventA)}</span> vs{' '}
+          <span>{formatConflictTime(conflict.eventA)}</span>
+          {conflict.isCrossAccount && conflict.eventA.accountEmail && (
+            <span className="tag tag-account tag-subtle">{conflict.eventA.accountEmail}</span>
+          )}{' '}
+          vs{' '}
           <span>{formatConflictTime(conflict.eventB)}</span>
+          {conflict.isCrossAccount && conflict.eventB.accountEmail && (
+            <span className="tag tag-account tag-subtle">{conflict.eventB.accountEmail}</span>
+          )}
         </div>
       </div>
       <div className="conflict-badges-group">
-        {showAccount && conflict.accountEmail && (
-          <span className="tag tag-account">{conflict.accountEmail}</span>
+        {conflict.isCrossAccount ? (
+          <span className="tag tag-cross-account">Cross-Account</span>
+        ) : (
+          showAccount && conflict.accountEmail && (
+            <span className="tag tag-account">{conflict.accountEmail}</span>
+          )
         )}
         <span className="conflict-duration-pill">
           {conflict.formattedOverlapDuration} Overlap

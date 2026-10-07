@@ -364,82 +364,95 @@ public class CalendarAnalysisService : ICalendarAnalysisService
         var conflicts = new List<ScheduleConflict>();
         var totalConflictDuration = TimeSpan.Zero;
         var affectedEventIds = new HashSet<string>();
+        var globalOverlapIntervals = new List<(DateTimeOffset Start, DateTimeOffset End)>();
 
-        // Phase 1: Strictly enforce single-calendar/account boundary.
-        // Group by AccountEmail so events from different accounts are never compared.
-        var accountGroups = validTimedEvents.GroupBy(e => e.AccountEmail);
+        // Phase 2: Global cross-account and intra-account conflict detection
+        var sortedEvents = validTimedEvents
+            .OrderBy(e => e.Start)
+            .ThenBy(e => e.End)
+            .ToList();
 
-        foreach (var group in accountGroups)
+        for (var i = 0; i < sortedEvents.Count; i++)
         {
-            var accountEvents = group.OrderBy(e => e.Start).ThenBy(e => e.End).ToList();
-            var accountOverlapIntervals = new List<(DateTimeOffset Start, DateTimeOffset End)>();
-
-            for (var i = 0; i < accountEvents.Count; i++)
+            var eventA = sortedEvents[i];
+            for (var j = i + 1; j < sortedEvents.Count; j++)
             {
-                var eventA = accountEvents[i];
-                for (var j = i + 1; j < accountEvents.Count; j++)
-                {
-                    var eventB = accountEvents[j];
+                var eventB = sortedEvents[j];
 
-                    // Since list is sorted by Start, if eventB.Start >= eventA.End,
-                    // no subsequent event can overlap with eventA.
-                    if (eventB.Start >= eventA.End)
+                // Since list is sorted by Start, if eventB.Start >= eventA.End,
+                // no subsequent event can overlap with eventA.
+                if (eventB.Start >= eventA.End)
+                {
+                    break;
+                }
+
+                // Conflict condition: eventA.Start < eventB.End AND eventB.Start < eventA.End
+                if (eventA.Start < eventB.End && eventB.Start < eventA.End)
+                {
+                    var isCrossAccount = !string.Equals(eventA.AccountEmail, eventB.AccountEmail, StringComparison.OrdinalIgnoreCase);
+
+                    // Suppress mirrored / shared invite across accounts (same title trimmed case-insensitive, identical start and end)
+                    if (isCrossAccount &&
+                        string.Equals(eventA.Title?.Trim(), eventB.Title?.Trim(), StringComparison.OrdinalIgnoreCase) &&
+                        eventA.Start == eventB.Start &&
+                        eventA.End == eventB.End)
                     {
-                        break;
+                        continue;
                     }
 
-                    // Conflict condition: eventA.Start < eventB.End AND eventB.Start < eventA.End
-                    if (eventA.Start < eventB.End && eventB.Start < eventA.End)
+                    var overlapStart = eventA.Start > eventB.Start ? eventA.Start : eventB.Start;
+                    var overlapEnd = eventA.End < eventB.End ? eventA.End : eventB.End;
+
+                    if (overlapEnd > overlapStart)
                     {
-                        var overlapStart = eventA.Start > eventB.Start ? eventA.Start : eventB.Start;
-                        var overlapEnd = eventA.End < eventB.End ? eventA.End : eventB.End;
+                        var overlapDuration = overlapEnd - overlapStart;
+                        globalOverlapIntervals.Add((overlapStart, overlapEnd));
 
-                        if (overlapEnd > overlapStart)
+                        var accountEmail = isCrossAccount ? "Multiple Accounts" : (eventA.AccountEmail ?? string.Empty);
+
+                        conflicts.Add(new ScheduleConflict
                         {
-                            var overlapDuration = overlapEnd - overlapStart;
-                            accountOverlapIntervals.Add((overlapStart, overlapEnd));
-
-                            conflicts.Add(new ScheduleConflict
+                            Id = $"conf_{eventA.Id}_{eventB.Id}",
+                            EventA = new ConflictEventSummary
                             {
-                                Id = $"conf_{eventA.Id}_{eventB.Id}",
-                                EventA = new ConflictEventSummary
-                                {
-                                    Id = eventA.Id,
-                                    Title = eventA.Title,
-                                    Start = eventA.Start,
-                                    End = eventA.End,
-                                    HtmlLink = eventA.HtmlLink
-                                },
-                                EventB = new ConflictEventSummary
-                                {
-                                    Id = eventB.Id,
-                                    Title = eventB.Title,
-                                    Start = eventB.Start,
-                                    End = eventB.End,
-                                    HtmlLink = eventB.HtmlLink
-                                },
-                                OverlapStart = overlapStart,
-                                OverlapEnd = overlapEnd,
-                                OverlapDuration = overlapDuration,
-                                FormattedOverlapDuration = FormatDuration(overlapDuration),
-                                AccountEmail = group.Key
-                            });
+                                Id = eventA.Id,
+                                Title = eventA.Title ?? string.Empty,
+                                Start = eventA.Start,
+                                End = eventA.End,
+                                HtmlLink = eventA.HtmlLink,
+                                AccountEmail = eventA.AccountEmail ?? string.Empty
+                            },
+                            EventB = new ConflictEventSummary
+                            {
+                                Id = eventB.Id,
+                                Title = eventB.Title ?? string.Empty,
+                                Start = eventB.Start,
+                                End = eventB.End,
+                                HtmlLink = eventB.HtmlLink,
+                                AccountEmail = eventB.AccountEmail ?? string.Empty
+                            },
+                            OverlapStart = overlapStart,
+                            OverlapEnd = overlapEnd,
+                            OverlapDuration = overlapDuration,
+                            FormattedOverlapDuration = FormatDuration(overlapDuration),
+                            AccountEmail = accountEmail,
+                            IsCrossAccount = isCrossAccount
+                        });
 
-                            affectedEventIds.Add(eventA.Id);
-                            affectedEventIds.Add(eventB.Id);
-                        }
+                        affectedEventIds.Add(eventA.Id);
+                        affectedEventIds.Add(eventB.Id);
                     }
                 }
             }
+        }
 
-            // Calculate merged wall-clock conflict duration for this account
-            if (accountOverlapIntervals.Count > 0)
+        // Calculate merged wall-clock conflict duration globally across all conflicts
+        if (globalOverlapIntervals.Count > 0)
+        {
+            var mergedIntervals = MergeIntervals(globalOverlapIntervals);
+            foreach (var interval in mergedIntervals)
             {
-                var mergedAccountIntervals = MergeIntervals(accountOverlapIntervals);
-                foreach (var interval in mergedAccountIntervals)
-                {
-                    totalConflictDuration += (interval.End - interval.Start);
-                }
+                totalConflictDuration += (interval.End - interval.Start);
             }
         }
 
@@ -468,6 +481,9 @@ public class CalendarAnalysisService : ICalendarAnalysisService
         // Deterministic schedule suggestions
         var suggestions = GenerateScheduleSuggestions(conflicts, validTimedEvents);
 
+        var crossAccountConflictsCount = conflicts.Count(c => c.IsCrossAccount);
+        var sameAccountConflictsCount = conflicts.Count(c => !c.IsCrossAccount);
+
         return new ScheduleHealthInfo
         {
             TotalConflicts = conflicts.Count,
@@ -477,6 +493,8 @@ public class CalendarAnalysisService : ICalendarAnalysisService
             ConflictFreeDaysCount = conflictFreeDaysCount,
             MostConflictedDay = mostConflictedDay,
             HasTodayConflict = hasTodayConflict,
+            CrossAccountConflictsCount = crossAccountConflictsCount,
+            SameAccountConflictsCount = sameAccountConflictsCount,
             Conflicts = conflicts.OrderBy(c => c.OverlapStart).ToList(),
             Suggestions = suggestions
         };
@@ -520,13 +538,26 @@ public class CalendarAnalysisService : ICalendarAnalysisService
         // 1. Conflict suggestions for each detected overlap
         foreach (var c in conflicts)
         {
-            suggestions.Add(new ScheduleSuggestion
+            if (c.IsCrossAccount)
             {
-                Type = "conflict",
-                Title = "Overlapping Commitment",
-                Description = $"\"{c.EventA.Title}\" overlaps with \"{c.EventB.Title}\" by {c.FormattedOverlapDuration}. Consider moving or shortening one of these sessions.",
-                Severity = "warning"
-            });
+                suggestions.Add(new ScheduleSuggestion
+                {
+                    Type = "conflict",
+                    Title = "Cross-Account Double Booking",
+                    Description = $"\"{c.EventA.Title}\" ({c.EventA.AccountEmail}) overlaps with \"{c.EventB.Title}\" ({c.EventB.AccountEmail}) by {c.FormattedOverlapDuration}. Consider rescheduling one of these commitments.",
+                    Severity = "warning"
+                });
+            }
+            else
+            {
+                suggestions.Add(new ScheduleSuggestion
+                {
+                    Type = "conflict",
+                    Title = "Overlapping Commitment",
+                    Description = $"\"{c.EventA.Title}\" overlaps with \"{c.EventB.Title}\" by {c.FormattedOverlapDuration}. Consider moving or shortening one of these sessions.",
+                    Severity = "warning"
+                });
+            }
         }
 
         // 2. Back-to-back meetings (0 buffer) within each account

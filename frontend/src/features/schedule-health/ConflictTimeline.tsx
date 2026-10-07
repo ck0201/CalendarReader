@@ -136,7 +136,7 @@ export const ConflictTimeline: React.FC<ConflictTimelineProps> = ({ conflicts })
                           left: `${leftPct.toFixed(1)}%`,
                           width: `${widthPct.toFixed(1)}%`,
                         }}
-                        title={`${ev.title} (${timeStr})`}
+                        title={`${ev.title}${ev.accountEmail ? ` (${ev.accountEmail})` : ''} (${timeStr})`}
                       >
                         <span className="timeline-event-bar-title">{ev.title}</span>
                         <span className="timeline-event-bar-time">{timeStr}</span>
@@ -170,9 +170,12 @@ export const ConflictTimeline: React.FC<ConflictTimelineProps> = ({ conflicts })
                       <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
                     </svg>
                     <span>
-                      <strong>{c.eventA.title}</strong> &harr;{' '}
-                      <strong>{c.eventB.title}</strong>: {c.formattedOverlapDuration} overlap (
-                      {oStart} – {oEnd})
+                      <strong>{c.eventA.title}</strong>
+                      {c.isCrossAccount && c.eventA.accountEmail ? ` (${c.eventA.accountEmail})` : ''}{' '}
+                      &harr;{' '}
+                      <strong>{c.eventB.title}</strong>
+                      {c.isCrossAccount && c.eventB.accountEmail ? ` (${c.eventB.accountEmail})` : ''}:{' '}
+                      {c.formattedOverlapDuration} overlap ({oStart} – {oEnd})
                     </span>
                   </div>
                 );

@@ -203,11 +203,11 @@ public class ScheduleConflictDetectionTests
     }
 
     [Fact]
-    public void DetectConflicts_Phase1_SingleAccountBoundary_DoesNotCompareAcrossAccounts()
+    public void DetectConflicts_Phase2_CrossAccount_DetectsOverlapBetweenDifferentAccounts()
     {
         // Account A: personal@gmail.com
         // Account B: work@gmail.com
-        // Even though time ranges overlap, in Phase 1 they belong to different accounts and MUST NOT conflict.
+        // Overlapping time ranges across different accounts are detected as cross-account conflicts.
         var start = new DateTimeOffset(2026, 10, 6, 0, 0, 0, TimeSpan.Zero);
         var end = new DateTimeOffset(2026, 10, 6, 23, 59, 59, TimeSpan.Zero);
 
@@ -232,10 +232,113 @@ public class ScheduleConflictDetectionTests
         var result = _service.Analyze([personalEvent, workEvent], start, end);
         var health = result.ScheduleHealth;
 
-        // Phase 1 assertion: cross-account events must NOT conflict
+        // Phase 2 assertions
+        Assert.Equal(1, health.TotalConflicts);
+        Assert.Equal(TimeSpan.FromMinutes(30), health.TotalConflictDuration);
+        Assert.Equal("30m", health.FormattedConflictDuration);
+        Assert.Equal(1, health.CrossAccountConflictsCount);
+        Assert.Equal(0, health.SameAccountConflictsCount);
+
+        var conflict = Assert.Single(health.Conflicts);
+        Assert.True(conflict.IsCrossAccount);
+        Assert.Equal("Multiple Accounts", conflict.AccountEmail);
+        Assert.Equal("Dentist Appointment", conflict.EventA.Title);
+        Assert.Equal("personal@gmail.com", conflict.EventA.AccountEmail);
+        Assert.Equal("Client Pitch", conflict.EventB.Title);
+        Assert.Equal("work@gmail.com", conflict.EventB.AccountEmail);
+        Assert.Equal(new DateTimeOffset(2026, 10, 6, 10, 30, 0, TimeSpan.Zero), conflict.OverlapStart);
+        Assert.Equal(new DateTimeOffset(2026, 10, 6, 11, 0, 0, TimeSpan.Zero), conflict.OverlapEnd);
+        Assert.Equal(TimeSpan.FromMinutes(30), conflict.OverlapDuration);
+        Assert.Equal("30m", conflict.FormattedOverlapDuration);
+
+        // Verify generated suggestion uses "Cross-Account Double Booking" and includes both account emails
+        var suggestion = Assert.Single(health.Suggestions, s => s.Type == "conflict");
+        Assert.Equal("Cross-Account Double Booking", suggestion.Title);
+        Assert.Contains("personal@gmail.com", suggestion.Description);
+        Assert.Contains("work@gmail.com", suggestion.Description);
+        Assert.Contains("Dentist Appointment", suggestion.Description);
+        Assert.Contains("Client Pitch", suggestion.Description);
+    }
+
+    [Fact]
+    public void DetectConflicts_Phase2_CrossAccount_MirroredOrSharedInvite_SuppressesFalseConflict()
+    {
+        var start = new DateTimeOffset(2026, 10, 6, 0, 0, 0, TimeSpan.Zero);
+        var end = new DateTimeOffset(2026, 10, 6, 23, 59, 59, TimeSpan.Zero);
+
+        // The user was invited to the same meeting on both work and personal accounts.
+        // Same title (case-insensitive, trimmed) and exactly matching start/end times across two accounts:
+        var workEvent = new CalendarEvent
+        {
+            Id = "work_shared_1",
+            Title = "  Quarterly Company All-Hands  ",
+            Start = new DateTimeOffset(2026, 10, 6, 14, 0, 0, TimeSpan.Zero),
+            End = new DateTimeOffset(2026, 10, 6, 15, 0, 0, TimeSpan.Zero),
+            AccountEmail = "work@company.com"
+        };
+
+        var personalEvent = new CalendarEvent
+        {
+            Id = "personal_shared_1",
+            Title = "quarterly company all-hands",
+            Start = new DateTimeOffset(2026, 10, 6, 14, 0, 0, TimeSpan.Zero),
+            End = new DateTimeOffset(2026, 10, 6, 15, 0, 0, TimeSpan.Zero),
+            AccountEmail = "personal@gmail.com"
+        };
+
+        var result = _service.Analyze([workEvent, personalEvent], start, end);
+        var health = result.ScheduleHealth;
+
+        // Mirrored shared invite is suppressed
         Assert.Equal(0, health.TotalConflicts);
         Assert.Equal(TimeSpan.Zero, health.TotalConflictDuration);
         Assert.Empty(health.Conflicts);
+        Assert.Contains(health.Suggestions, s => s.Type == "healthy");
+    }
+
+    [Fact]
+    public void DetectConflicts_Phase2_CrossAccount_MergedWallClockDuration_MultipleOverlappingAccounts()
+    {
+        var start = new DateTimeOffset(2026, 10, 6, 0, 0, 0, TimeSpan.Zero);
+        var end = new DateTimeOffset(2026, 10, 6, 23, 59, 59, TimeSpan.Zero);
+
+        var personalEvent = new CalendarEvent
+        {
+            Id = "pers1",
+            Title = "Personal Errand",
+            Start = new DateTimeOffset(2026, 10, 6, 10, 0, 0, TimeSpan.Zero),
+            End = new DateTimeOffset(2026, 10, 6, 11, 0, 0, TimeSpan.Zero),
+            AccountEmail = "personal@gmail.com"
+        };
+
+        var workEvent = new CalendarEvent
+        {
+            Id = "work1",
+            Title = "Client Call",
+            Start = new DateTimeOffset(2026, 10, 6, 10, 30, 0, TimeSpan.Zero),
+            End = new DateTimeOffset(2026, 10, 6, 11, 30, 0, TimeSpan.Zero),
+            AccountEmail = "work@gmail.com"
+        };
+
+        var consultingEvent = new CalendarEvent
+        {
+            Id = "cons1",
+            Title = "Project Sync",
+            Start = new DateTimeOffset(2026, 10, 6, 10, 45, 0, TimeSpan.Zero),
+            End = new DateTimeOffset(2026, 10, 6, 12, 0, 0, TimeSpan.Zero),
+            AccountEmail = "consulting@client.com"
+        };
+
+        var result = _service.Analyze([personalEvent, workEvent, consultingEvent], start, end);
+        var health = result.ScheduleHealth;
+
+        // 3 pairwise conflicts across the 3 accounts
+        Assert.Equal(3, health.TotalConflicts);
+        Assert.Equal(3, health.CrossAccountConflictsCount);
+        Assert.Equal(0, health.SameAccountConflictsCount);
+        // Merged wall-clock double-booked duration is 10:30 to 11:30 = 1 hour
+        Assert.Equal(TimeSpan.FromHours(1), health.TotalConflictDuration);
+        Assert.Equal("1h", health.FormattedConflictDuration);
     }
 
     [Fact]

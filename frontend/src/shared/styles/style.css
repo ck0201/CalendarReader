@@ -756,6 +756,23 @@ body {
   white-space: nowrap;
 }
 
+.tag-cross-account {
+  background-color: rgba(245, 158, 11, 0.15);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 0.7rem;
+  letter-spacing: 0.03em;
+}
+
+.tag-subtle {
+  font-size: 0.72rem;
+  padding: 0.1rem 0.4rem;
+  margin-left: 0.35rem;
+  vertical-align: middle;
+}
+
 .task-account {
   font-size: 0.75rem;
   color: var(--text-muted);

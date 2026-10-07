@@ -63,6 +63,8 @@ public class ScheduleHealthInfo
     public int ConflictFreeDaysCount { get; set; }
     public string MostConflictedDay { get; set; } = "None";
     public bool HasTodayConflict { get; set; }
+    public int CrossAccountConflictsCount { get; set; }
+    public int SameAccountConflictsCount { get; set; }
     public List<ScheduleConflict> Conflicts { get; set; } = [];
     public List<ScheduleSuggestion> Suggestions { get; set; } = [];
 }
@@ -77,6 +79,7 @@ public class ScheduleConflict
     public TimeSpan OverlapDuration { get; set; }
     public string FormattedOverlapDuration { get; set; } = string.Empty;
     public string AccountEmail { get; set; } = string.Empty;
+    public bool IsCrossAccount { get; set; }
 }
 
 public class ConflictEventSummary
@@ -86,6 +89,7 @@ public class ConflictEventSummary
     public DateTimeOffset Start { get; set; }
     public DateTimeOffset End { get; set; }
     public string? HtmlLink { get; set; }
+    public string AccountEmail { get; set; } = string.Empty;
 }
 
 public class ScheduleSuggestion

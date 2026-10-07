@@ -69,6 +69,7 @@ export interface ConflictEventSummary {
   start: string;
   end: string;
   htmlLink?: string | null;
+  accountEmail?: string;
 }
 
 export interface ScheduleConflict {
@@ -80,6 +81,7 @@ export interface ScheduleConflict {
   overlapDuration: string;
   formattedOverlapDuration: string;
   accountEmail: string;
+  isCrossAccount?: boolean;
 }
 
 export interface ScheduleSuggestion {
@@ -97,6 +99,8 @@ export interface ScheduleHealthInfo {
   conflictFreeDaysCount: number;
   mostConflictedDay: string;
   hasTodayConflict: boolean;
+  crossAccountConflictsCount?: number;
+  sameAccountConflictsCount?: number;
   conflicts: ScheduleConflict[];
   suggestions: ScheduleSuggestion[];
 }
