@@ -5,6 +5,8 @@ import { Header } from '../features/auth/Header';
 import { LandingCard } from '../features/auth/LandingCard';
 import { ReauthBanner } from '../features/auth/ReauthBanner';
 import { useCalendarInsights } from '../features/insights/useCalendarInsights';
+import { useCalendars } from '../features/calendar/useCalendars';
+import { CalendarFilterBar } from '../features/calendar/CalendarFilterBar';
 import { SummaryBanner } from '../features/insights/SummaryBanner';
 import { MetricsGrid } from '../features/insights/MetricsGrid';
 import { ObservationsList } from '../features/insights/ObservationsList';
@@ -29,13 +31,24 @@ export const App: React.FC = () => {
 
   const [range, setRange] = useState<RangeType>('week');
   const accountsKey = accounts.map((a) => `${a.accountId}:${a.requiresReauth}`).join(',');
+
+  const {
+    calendars,
+    selectedCalendarIds,
+    loading: calendarsLoading,
+    error: calendarsError,
+    toggleCalendar,
+    selectAll,
+    selectPrimaryOnly,
+  } = useCalendars(isAuthenticated, accountsKey);
+
   const {
     insights,
     loading: insightsLoading,
     error: insightsError,
     refetch: refetchInsights,
     conflictingEventIds,
-  } = useCalendarInsights(range, isAuthenticated, accountsKey);
+  } = useCalendarInsights(range, isAuthenticated, accountsKey, selectedCalendarIds);
 
   const { start, end } = getDateRange(range);
   const rangeSubtitle = formatRangeLabel(start, end, range);
@@ -64,8 +77,8 @@ export const App: React.FC = () => {
 
       <div className="container">
         <AlertBanner
-          message={errorMessage || insightsError}
-          type={insightsError ? 'error' : alertType}
+          message={errorMessage || insightsError || calendarsError}
+          type={insightsError || calendarsError ? 'error' : alertType}
           onClose={clearError}
         />
       </div>
@@ -110,6 +123,15 @@ export const App: React.FC = () => {
                 </div>
               </div>
 
+              <CalendarFilterBar
+                calendars={calendars}
+                selectedCalendarIds={selectedCalendarIds}
+                onToggleCalendar={toggleCalendar}
+                onSelectAll={selectAll}
+                onSelectPrimaryOnly={selectPrimaryOnly}
+                loading={calendarsLoading}
+              />
+
               {insightsLoading && (
                 <div className="loading-state">
                   <div className="spinner" />
@@ -134,6 +156,7 @@ export const App: React.FC = () => {
                     events={insights.events || []}
                     conflictingEventIds={conflictingEventIds}
                     isMultiAccount={isMultiAccount}
+                    selectedCalendarIds={selectedCalendarIds}
                   />
                 </div>
               )}

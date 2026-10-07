@@ -16,6 +16,9 @@ public class CalendarEvent
     public string? Status { get; set; }
     public string? HtmlLink { get; set; }
     public string AccountEmail { get; set; } = string.Empty;
+    public string CalendarId { get; set; } = string.Empty;
+    public string CalendarName { get; set; } = string.Empty;
+    public string? CalendarColor { get; set; }
 
     public TimeSpan Duration => End > Start ? End - Start : TimeSpan.Zero;
 

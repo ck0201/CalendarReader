@@ -21,11 +21,17 @@ export const ConflictCard: React.FC<ConflictCardProps> = ({
         </div>
         <div className="conflict-pair-times">
           <span>{formatConflictTime(conflict.eventA)}</span>
+          {conflict.eventA.calendarName && (
+            <span className="tag tag-calendar tag-subtle">{conflict.eventA.calendarName}</span>
+          )}
           {conflict.isCrossAccount && conflict.eventA.accountEmail && (
             <span className="tag tag-account tag-subtle">{conflict.eventA.accountEmail}</span>
           )}{' '}
           vs{' '}
           <span>{formatConflictTime(conflict.eventB)}</span>
+          {conflict.eventB.calendarName && (
+            <span className="tag tag-calendar tag-subtle">{conflict.eventB.calendarName}</span>
+          )}
           {conflict.isCrossAccount && conflict.eventB.accountEmail && (
             <span className="tag tag-account tag-subtle">{conflict.eventB.accountEmail}</span>
           )}

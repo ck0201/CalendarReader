@@ -27,6 +27,23 @@ export const EventRow: React.FC<EventRowProps> = ({
             {event.accountEmail}
           </Badge>
         )}
+        {event.calendarName && (
+          <span
+            className="tag tag-calendar"
+            style={
+              event.calendarColor
+                ? {
+                    backgroundColor: `${event.calendarColor}20`,
+                    borderColor: `${event.calendarColor}50`,
+                    color: event.calendarColor,
+                  }
+                : undefined
+            }
+            title={`Calendar: ${event.calendarName}`}
+          >
+            {event.calendarName}
+          </span>
+        )}
         {isConflicted && (
           <Badge variant="conflict" title="This event conflicts with another commitment">
             Conflict

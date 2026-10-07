@@ -8,6 +8,7 @@ public interface IGoogleCalendarService
     Task<bool> HandleAuthorizationCallbackAsync(string code, string sessionId, CancellationToken cancellationToken = default);
     Task<bool> DisconnectAccountAsync(string sessionId, string accountId, CancellationToken cancellationToken = default);
     Task<bool> DisconnectAllAccountsAsync(string sessionId, CancellationToken cancellationToken = default);
-    Task<IReadOnlyList<CalendarEvent>> GetEventsAsync(string sessionId, DateTimeOffset start, DateTimeOffset end, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<UserCalendar>> GetCalendarsAsync(string sessionId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<CalendarEvent>> GetEventsAsync(string sessionId, DateTimeOffset start, DateTimeOffset end, IReadOnlyList<string>? calendarIds = null, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<CalendarTask>> GetTasksAsync(string sessionId, DateTimeOffset start, DateTimeOffset end, CancellationToken cancellationToken = default);
 }

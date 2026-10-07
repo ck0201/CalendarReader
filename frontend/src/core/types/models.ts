@@ -27,6 +27,23 @@ export interface CalendarEvent {
   status?: string | null;
   htmlLink?: string | null;
   accountEmail: string;
+  calendarId?: string;
+  calendarName?: string;
+  calendarColor?: string | null;
+}
+
+export interface UserCalendar {
+  id: string;
+  accountId: string;
+  accountEmail: string;
+  summary: string;
+  description?: string | null;
+  isPrimary: boolean;
+  backgroundColor?: string | null;
+  foregroundColor?: string | null;
+  accessRole: string;
+  isSelectedByDefault: boolean;
+  isShared: boolean;
 }
 
 export interface CalendarTask {
@@ -70,6 +87,7 @@ export interface ConflictEventSummary {
   end: string;
   htmlLink?: string | null;
   accountEmail?: string;
+  calendarName?: string;
 }
 
 export interface ScheduleConflict {

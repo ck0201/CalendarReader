@@ -160,10 +160,8 @@ public class GoogleCalendarService : IGoogleCalendarService
         return true;
     }
 
-    public async Task<IReadOnlyList<CalendarEvent>> GetEventsAsync(
+    public async Task<IReadOnlyList<UserCalendar>> GetCalendarsAsync(
         string sessionId,
-        DateTimeOffset start,
-        DateTimeOffset end,
         CancellationToken cancellationToken = default)
     {
         var accounts = await _tokenStore.GetAllAccountTokensAsync(sessionId, cancellationToken);
@@ -178,29 +176,20 @@ public class GoogleCalendarService : IGoogleCalendarService
             throw new UnauthorizedAccessException("All connected accounts require re-authorization.");
         }
 
-        var fetchTasks = activeAccounts.Select(acc => FetchEventsForAccountAsync(sessionId, acc, start, end, cancellationToken));
+        var fetchTasks = activeAccounts.Select(acc => FetchCalendarsForAccountAsync(sessionId, acc, cancellationToken));
         var results = await Task.WhenAll(fetchTasks);
 
         return results
-            .SelectMany(events => events)
-            .OrderBy(e => e.Start)
+            .SelectMany(calendars => calendars)
+            .OrderByDescending(c => c.IsPrimary)
+            .ThenBy(c => c.AccountEmail)
+            .ThenBy(c => c.Summary)
             .ToList();
     }
 
-    public Task<IReadOnlyList<CalendarTask>> GetTasksAsync(
-        string sessionId,
-        DateTimeOffset start,
-        DateTimeOffset end,
-        CancellationToken cancellationToken = default)
-    {
-        return Task.FromResult<IReadOnlyList<CalendarTask>>([]);
-    }
-
-    private async Task<IReadOnlyList<CalendarEvent>> FetchEventsForAccountAsync(
+    private async Task<IReadOnlyList<UserCalendar>> FetchCalendarsForAccountAsync(
         string sessionId,
         AccountTokenData account,
-        DateTimeOffset start,
-        DateTimeOffset end,
         CancellationToken ct)
     {
         try
@@ -222,16 +211,10 @@ public class GoogleCalendarService : IGoogleCalendarService
                 ApplicationName = "CalendarReader"
             });
 
-            var request = calendarService.Events.List("primary");
-            request.TimeMinDateTimeOffset = start;
-            request.TimeMaxDateTimeOffset = end;
-            request.SingleEvents = true; // Expand recurring events into individual occurrences
-            request.OrderBy = EventsResource.ListRequest.OrderByEnum.StartTime;
+            var request = calendarService.CalendarList.List();
+            _logger.LogInformation("Retrieving calendar list for account {Email}", account.Email);
+            var calendarList = await request.ExecuteAsync(ct);
 
-            _logger.LogInformation("Retrieving calendar events for account {Email} from {Start} to {End}", account.Email, start, end);
-            var googleEvents = await request.ExecuteAsync(ct);
-
-            // If token refreshed automatically during the call, persist updated tokens
             if (!string.Equals(tokenResponse.AccessToken, account.AccessToken, StringComparison.Ordinal))
             {
                 account.AccessToken = tokenResponse.AccessToken;
@@ -240,68 +223,282 @@ public class GoogleCalendarService : IGoogleCalendarService
                 await _tokenStore.SaveAccountTokenAsync(sessionId, account, ct);
             }
 
-            var mappedEvents = new List<CalendarEvent>();
-            if (googleEvents?.Items == null)
+            var result = new List<UserCalendar>();
+            if (calendarList?.Items == null || calendarList.Items.Count == 0)
             {
-                return mappedEvents;
+                result.Add(new UserCalendar
+                {
+                    Id = "primary",
+                    AccountId = account.AccountId,
+                    AccountEmail = account.Email,
+                    Summary = account.DisplayName ?? account.Email,
+                    IsPrimary = true,
+                    IsSelectedByDefault = true,
+                    AccessRole = "owner"
+                });
+                return result;
             }
 
-            foreach (var item in googleEvents.Items)
+            foreach (var item in calendarList.Items)
             {
-                if (item.Status == "cancelled")
+                if (item.Hidden.HasValue && item.Hidden.Value)
                 {
                     continue;
                 }
 
-                var isAllDay = item.Start?.DateTimeDateTimeOffset == null && !string.IsNullOrEmpty(item.Start?.Date);
-                DateTimeOffset eventStart;
-                DateTimeOffset eventEnd;
+                var isPrimary = item.Primary.GetValueOrDefault(false) ||
+                                string.Equals(item.Id, "primary", StringComparison.OrdinalIgnoreCase) ||
+                                string.Equals(item.Id, account.Email, StringComparison.OrdinalIgnoreCase);
 
-                if (isAllDay)
+                var summary = !string.IsNullOrWhiteSpace(item.Summary)
+                    ? item.Summary.Trim()
+                    : (isPrimary ? (account.DisplayName ?? account.Email) : "(Untitled Calendar)");
+
+                result.Add(new UserCalendar
                 {
-                    if (DateTime.TryParseExact(item.Start?.Date, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var sDate))
-                    {
-                        eventStart = new DateTimeOffset(sDate, TimeSpan.Zero);
-                    }
-                    else
-                    {
-                        eventStart = start;
-                    }
-
-                    if (DateTime.TryParseExact(item.End?.Date, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var eDate))
-                    {
-                        eventEnd = new DateTimeOffset(eDate, TimeSpan.Zero);
-                    }
-                    else
-                    {
-                        eventEnd = eventStart.AddDays(1);
-                    }
-                }
-                else
-                {
-                    eventStart = item.Start?.DateTimeDateTimeOffset ?? start;
-                    eventEnd = item.End?.DateTimeDateTimeOffset ?? eventStart.AddMinutes(30);
-                }
-
-                var title = string.IsNullOrWhiteSpace(item.Summary) ? "(No Title)" : item.Summary.Trim();
-                var description = item.Description?.Trim();
-                var isTrain = CalendarEvent.IsTrainJourneyMatch(title, description);
-
-                mappedEvents.Add(new CalendarEvent
-                {
-                    Id = $"{account.AccountId}_{item.Id ?? Guid.NewGuid().ToString()}",
-                    Title = title,
-                    Description = description,
-                    IsTrainJourney = isTrain,
-                    Start = eventStart,
-                    End = eventEnd,
-                    IsAllDay = isAllDay,
-                    IsRecurring = !string.IsNullOrEmpty(item.RecurringEventId),
-                    AttendeeCount = item.Attendees?.Count ?? 0,
-                    Status = item.Status,
-                    HtmlLink = item.HtmlLink,
-                    AccountEmail = account.Email
+                    Id = item.Id,
+                    AccountId = account.AccountId,
+                    AccountEmail = account.Email,
+                    Summary = summary,
+                    Description = item.Description,
+                    IsPrimary = isPrimary,
+                    BackgroundColor = item.BackgroundColor,
+                    ForegroundColor = item.ForegroundColor,
+                    AccessRole = item.AccessRole ?? (isPrimary ? "owner" : "reader"),
+                    IsSelectedByDefault = isPrimary
                 });
+            }
+
+            if (!result.Any(c => c.IsPrimary) && result.Count > 0)
+            {
+                result[0].IsPrimary = true;
+                result[0].IsSelectedByDefault = true;
+            }
+
+            return result;
+        }
+        catch (TokenResponseException trEx)
+        {
+            _logger.LogWarning("Token refresh failed while fetching calendars for {Email}: {Error}", account.Email, trEx.Error?.ErrorDescription ?? trEx.Message);
+            await _tokenStore.MarkRequiresReauthAsync(sessionId, account.AccountId, ct);
+            return [];
+        }
+        catch (GoogleApiException gEx) when (gEx.HttpStatusCode == System.Net.HttpStatusCode.Unauthorized)
+        {
+            _logger.LogWarning("Google Calendar API returned 401 Unauthorized while fetching calendars for {Email}: {Message}", account.Email, gEx.Message);
+            await _tokenStore.MarkRequiresReauthAsync(sessionId, account.AccountId, ct);
+            return [];
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to retrieve calendar list for account {Email}, providing primary fallback", account.Email);
+            return
+            [
+                new UserCalendar
+                {
+                    Id = "primary",
+                    AccountId = account.AccountId,
+                    AccountEmail = account.Email,
+                    Summary = account.DisplayName ?? account.Email,
+                    IsPrimary = true,
+                    IsSelectedByDefault = true,
+                    AccessRole = "owner"
+                }
+            ];
+        }
+    }
+
+    public async Task<IReadOnlyList<CalendarEvent>> GetEventsAsync(
+        string sessionId,
+        DateTimeOffset start,
+        DateTimeOffset end,
+        IReadOnlyList<string>? calendarIds = null,
+        CancellationToken cancellationToken = default)
+    {
+        var accounts = await _tokenStore.GetAllAccountTokensAsync(sessionId, cancellationToken);
+        if (accounts.Count == 0)
+        {
+            throw new UnauthorizedAccessException("Not authenticated or session has expired.");
+        }
+
+        var activeAccounts = accounts.Where(a => !a.RequiresReauth).ToList();
+        if (activeAccounts.Count == 0)
+        {
+            throw new UnauthorizedAccessException("All connected accounts require re-authorization.");
+        }
+
+        var fetchTasks = activeAccounts.Select(acc => FetchEventsForAccountAsync(sessionId, acc, start, end, calendarIds, cancellationToken));
+        var results = await Task.WhenAll(fetchTasks);
+
+        var seenEventIds = new HashSet<string>();
+        var deduplicatedEvents = new List<CalendarEvent>();
+
+        foreach (var ev in results.SelectMany(events => events).OrderBy(e => e.Start))
+        {
+            if (seenEventIds.Add(ev.Id))
+            {
+                deduplicatedEvents.Add(ev);
+            }
+        }
+
+        return deduplicatedEvents;
+    }
+
+    public Task<IReadOnlyList<CalendarTask>> GetTasksAsync(
+        string sessionId,
+        DateTimeOffset start,
+        DateTimeOffset end,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<IReadOnlyList<CalendarTask>>([]);
+    }
+
+    private async Task<IReadOnlyList<CalendarEvent>> FetchEventsForAccountAsync(
+        string sessionId,
+        AccountTokenData account,
+        DateTimeOffset start,
+        DateTimeOffset end,
+        IReadOnlyList<string>? requestedCalendarIds,
+        CancellationToken ct)
+    {
+        try
+        {
+            var tokenResponse = new TokenResponse
+            {
+                AccessToken = account.AccessToken,
+                RefreshToken = account.RefreshToken,
+                IssuedUtc = account.IssuedUtc?.UtcDateTime ?? DateTime.UtcNow,
+                ExpiresInSeconds = account.ExpiresInSeconds
+            };
+
+            var flow = CreateFlow();
+            var credential = new UserCredential(flow, account.AccountId, tokenResponse);
+
+            using var calendarService = new CalendarService(new BaseClientService.Initializer
+            {
+                HttpClientInitializer = credential,
+                ApplicationName = "CalendarReader"
+            });
+
+            // Discover calendars for this account
+            var accountCalendars = await FetchCalendarsForAccountAsync(sessionId, account, ct);
+
+            // Filter to matching calendars
+            List<UserCalendar> targetCalendars;
+            if (requestedCalendarIds == null || requestedCalendarIds.Count == 0)
+            {
+                targetCalendars = accountCalendars.Where(c => c.IsPrimary).ToList();
+                if (targetCalendars.Count == 0 && accountCalendars.Count > 0)
+                {
+                    targetCalendars = [accountCalendars[0]];
+                }
+            }
+            else
+            {
+                targetCalendars = accountCalendars.Where(c =>
+                    requestedCalendarIds.Contains(c.Id) ||
+                    (c.IsPrimary && (requestedCalendarIds.Contains("primary") || requestedCalendarIds.Contains(account.Email)))
+                ).ToList();
+            }
+
+            if (targetCalendars.Count == 0)
+            {
+                return [];
+            }
+
+            var mappedEvents = new List<CalendarEvent>();
+
+            foreach (var cal in targetCalendars)
+            {
+                try
+                {
+                    var request = calendarService.Events.List(cal.Id);
+                    request.TimeMinDateTimeOffset = start;
+                    request.TimeMaxDateTimeOffset = end;
+                    request.SingleEvents = true;
+                    request.OrderBy = EventsResource.ListRequest.OrderByEnum.StartTime;
+
+                    _logger.LogInformation("Retrieving calendar events for account {Email}, calendar {CalendarId} ({Summary})", account.Email, cal.Id, cal.Summary);
+                    var googleEvents = await request.ExecuteAsync(ct);
+
+                    if (googleEvents?.Items == null)
+                    {
+                        continue;
+                    }
+
+                    foreach (var item in googleEvents.Items)
+                    {
+                        if (item.Status == "cancelled")
+                        {
+                            continue;
+                        }
+
+                        var isAllDay = item.Start?.DateTimeDateTimeOffset == null && !string.IsNullOrEmpty(item.Start?.Date);
+                        DateTimeOffset eventStart;
+                        DateTimeOffset eventEnd;
+
+                        if (isAllDay)
+                        {
+                            if (DateTime.TryParseExact(item.Start?.Date, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var sDate))
+                            {
+                                eventStart = new DateTimeOffset(sDate, TimeSpan.Zero);
+                            }
+                            else
+                            {
+                                eventStart = start;
+                            }
+
+                            if (DateTime.TryParseExact(item.End?.Date, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var eDate))
+                            {
+                                eventEnd = new DateTimeOffset(eDate, TimeSpan.Zero);
+                            }
+                            else
+                            {
+                                eventEnd = eventStart.AddDays(1);
+                            }
+                        }
+                        else
+                        {
+                            eventStart = item.Start?.DateTimeDateTimeOffset ?? start;
+                            eventEnd = item.End?.DateTimeDateTimeOffset ?? eventStart.AddMinutes(30);
+                        }
+
+                        var title = string.IsNullOrWhiteSpace(item.Summary) ? "(No Title)" : item.Summary.Trim();
+                        var description = item.Description?.Trim();
+                        var isTrain = CalendarEvent.IsTrainJourneyMatch(title, description);
+
+                        mappedEvents.Add(new CalendarEvent
+                        {
+                            Id = $"{account.AccountId}_{item.Id ?? Guid.NewGuid().ToString()}",
+                            Title = title,
+                            Description = description,
+                            IsTrainJourney = isTrain,
+                            Start = eventStart,
+                            End = eventEnd,
+                            IsAllDay = isAllDay,
+                            IsRecurring = !string.IsNullOrEmpty(item.RecurringEventId),
+                            AttendeeCount = item.Attendees?.Count ?? 0,
+                            Status = item.Status,
+                            HtmlLink = item.HtmlLink,
+                            AccountEmail = account.Email,
+                            CalendarId = cal.Id,
+                            CalendarName = cal.Summary,
+                            CalendarColor = cal.BackgroundColor
+                        });
+                    }
+                }
+                catch (GoogleApiException gEx) when (gEx.HttpStatusCode == System.Net.HttpStatusCode.Forbidden || gEx.HttpStatusCode == System.Net.HttpStatusCode.NotFound)
+                {
+                    _logger.LogWarning("Calendar {CalendarId} ({Summary}) returned {StatusCode}. Skipping gracefully without failing request.", cal.Id, cal.Summary, gEx.HttpStatusCode);
+                }
+            }
+
+            if (!string.Equals(tokenResponse.AccessToken, account.AccessToken, StringComparison.Ordinal))
+            {
+                account.AccessToken = tokenResponse.AccessToken;
+                account.IssuedUtc = tokenResponse.IssuedUtc;
+                account.ExpiresInSeconds = tokenResponse.ExpiresInSeconds;
+                await _tokenStore.SaveAccountTokenAsync(sessionId, account, ct);
             }
 
             return mappedEvents;

@@ -190,11 +190,39 @@ app.MapPost("/api/auth/logout", async (
 // Calendar Endpoints
 // -------------------------------------------------------------
 
+app.MapGet("/api/calendar/calendars", async (
+    HttpContext context,
+    IGoogleCalendarService calendarService,
+    IAccountTokenStore tokenStore,
+    CancellationToken ct) =>
+{
+    var sessionId = context.Request.Cookies[SessionCookieName];
+    if (string.IsNullOrEmpty(sessionId) || !await tokenStore.HasAnyAccountAsync(sessionId, ct))
+    {
+        return Results.Unauthorized();
+    }
+
+    try
+    {
+        var calendars = await calendarService.GetCalendarsAsync(sessionId, ct);
+        return Results.Ok(calendars);
+    }
+    catch (UnauthorizedAccessException)
+    {
+        return Results.Unauthorized();
+    }
+    catch (Exception ex)
+    {
+        return Results.Problem(detail: ex.Message, title: "Failed to retrieve user calendars.");
+    }
+});
+
 app.MapGet("/api/calendar/events", async (
     HttpContext context,
     DateTimeOffset? start,
     DateTimeOffset? end,
     string? filter,
+    string? calendars,
     IGoogleCalendarService calendarService,
     IAccountTokenStore tokenStore,
     CancellationToken ct) =>
@@ -213,9 +241,13 @@ app.MapGet("/api/calendar/events", async (
         return Results.BadRequest(new { error = "End date must be greater than start date." });
     }
 
+    var calendarIds = !string.IsNullOrWhiteSpace(calendars)
+        ? calendars.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+        : null;
+
     try
     {
-        var events = await calendarService.GetEventsAsync(sessionId, rangeStart, rangeEnd, ct);
+        var events = await calendarService.GetEventsAsync(sessionId, rangeStart, rangeEnd, calendarIds, ct);
         if (string.Equals(filter, "train", StringComparison.OrdinalIgnoreCase))
         {
             events = events.Where(e => e.IsTrainJourney).ToList();
@@ -261,7 +293,7 @@ app.MapGet("/api/calendar/tasks", async (
     try
     {
         var googleTasks = await calendarService.GetTasksAsync(sessionId, rangeStart, rangeEnd, ct);
-        var events = await calendarService.GetEventsAsync(sessionId, rangeStart, rangeEnd, ct);
+        var events = await calendarService.GetEventsAsync(sessionId, rangeStart, rangeEnd, null, ct);
         var eventTasks = events.Where(e => e.IsTask).Select(e => e.ToTask());
 
         var allTasks = new List<CalendarTask>(googleTasks);
@@ -291,6 +323,7 @@ app.MapGet("/api/calendar/insights", async (
     HttpContext context,
     DateTimeOffset? start,
     DateTimeOffset? end,
+    string? calendars,
     IGoogleCalendarService calendarService,
     ICalendarAnalysisService analysisService,
     IAccountTokenStore tokenStore,
@@ -310,9 +343,13 @@ app.MapGet("/api/calendar/insights", async (
         return Results.BadRequest(new { error = "End date must be greater than start date." });
     }
 
+    var calendarIds = !string.IsNullOrWhiteSpace(calendars)
+        ? calendars.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+        : null;
+
     try
     {
-        var events = await calendarService.GetEventsAsync(sessionId, rangeStart, rangeEnd, ct);
+        var events = await calendarService.GetEventsAsync(sessionId, rangeStart, rangeEnd, calendarIds, ct);
         var tasks = await calendarService.GetTasksAsync(sessionId, rangeStart, rangeEnd, ct);
         var insights = analysisService.Analyze(events, rangeStart, rangeEnd, tasks);
         return Results.Ok(insights);

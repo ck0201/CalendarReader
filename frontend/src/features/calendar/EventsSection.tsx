@@ -8,12 +8,14 @@ interface EventsSectionProps {
   events: CalendarEvent[];
   conflictingEventIds: Set<string>;
   isMultiAccount: boolean;
+  selectedCalendarIds?: string[];
 }
 
 export const EventsSection: React.FC<EventsSectionProps> = ({
   events,
   conflictingEventIds,
   isMultiAccount,
+  selectedCalendarIds,
 }) => {
   const [filter, setFilter] = useState<EventFilterType>('all');
   const [trainLoading, setTrainLoading] = useState<boolean>(false);
@@ -50,7 +52,7 @@ export const EventsSection: React.FC<EventsSectionProps> = ({
     setTrainLoading(true);
 
     calendarApiClient
-      .getEvents(todayStart, twoMonthsLater, 'train')
+      .getEvents(todayStart, twoMonthsLater, 'train', selectedCalendarIds)
       .then((data) => {
         if (isMounted) {
           setFetchedTrains(data);

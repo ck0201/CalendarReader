@@ -3,6 +3,7 @@ import type {
   CalendarEvent,
   CalendarInsightResult,
   CalendarTask,
+  UserCalendar,
 } from '../types/models';
 
 export class ApiError extends Error {
@@ -57,15 +58,25 @@ export const calendarApiClient = {
     });
   },
 
-  async getInsights(start: Date, end: Date): Promise<CalendarInsightResult> {
-    const url = `/api/calendar/insights?start=${encodeURIComponent(start.toISOString())}&end=${encodeURIComponent(end.toISOString())}`;
+  async getCalendars(): Promise<UserCalendar[]> {
+    return request<UserCalendar[]>('/api/calendar/calendars');
+  },
+
+  async getInsights(start: Date, end: Date, calendarIds?: string[]): Promise<CalendarInsightResult> {
+    let url = `/api/calendar/insights?start=${encodeURIComponent(start.toISOString())}&end=${encodeURIComponent(end.toISOString())}`;
+    if (calendarIds && calendarIds.length > 0) {
+      url += `&calendars=${encodeURIComponent(calendarIds.join(','))}`;
+    }
     return request<CalendarInsightResult>(url);
   },
 
-  async getEvents(start: Date, end: Date, filter?: string): Promise<CalendarEvent[]> {
+  async getEvents(start: Date, end: Date, filter?: string, calendarIds?: string[]): Promise<CalendarEvent[]> {
     let url = `/api/calendar/events?start=${encodeURIComponent(start.toISOString())}&end=${encodeURIComponent(end.toISOString())}`;
     if (filter) {
       url += `&filter=${encodeURIComponent(filter)}`;
+    }
+    if (calendarIds && calendarIds.length > 0) {
+      url += `&calendars=${encodeURIComponent(calendarIds.join(','))}`;
     }
     return request<CalendarEvent[]>(url);
   },

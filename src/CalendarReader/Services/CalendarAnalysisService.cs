@@ -420,7 +420,8 @@ public class CalendarAnalysisService : ICalendarAnalysisService
                                 Start = eventA.Start,
                                 End = eventA.End,
                                 HtmlLink = eventA.HtmlLink,
-                                AccountEmail = eventA.AccountEmail ?? string.Empty
+                                AccountEmail = eventA.AccountEmail ?? string.Empty,
+                                CalendarName = eventA.CalendarName ?? string.Empty
                             },
                             EventB = new ConflictEventSummary
                             {
@@ -429,7 +430,8 @@ public class CalendarAnalysisService : ICalendarAnalysisService
                                 Start = eventB.Start,
                                 End = eventB.End,
                                 HtmlLink = eventB.HtmlLink,
-                                AccountEmail = eventB.AccountEmail ?? string.Empty
+                                AccountEmail = eventB.AccountEmail ?? string.Empty,
+                                CalendarName = eventB.CalendarName ?? string.Empty
                             },
                             OverlapStart = overlapStart,
                             OverlapEnd = overlapEnd,

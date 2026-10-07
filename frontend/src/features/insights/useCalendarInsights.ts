@@ -14,11 +14,16 @@ export interface UseCalendarInsightsReturn {
 export function useCalendarInsights(
   range: RangeType,
   enabled: boolean,
-  accountsKey?: string
+  accountsKey?: string,
+  calendarIds?: string[]
 ): UseCalendarInsightsReturn {
   const [insights, setInsights] = useState<CalendarInsightResult | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+
+  const calendarIdsKey = useMemo(() => {
+    return calendarIds && calendarIds.length > 0 ? calendarIds.slice().sort().join(',') : '';
+  }, [calendarIds]);
 
   const fetchInsights = useCallback(async () => {
     if (!enabled) {
@@ -31,7 +36,7 @@ export function useCalendarInsights(
     setError(null);
 
     try {
-      const data = await calendarApiClient.getInsights(start, end);
+      const data = await calendarApiClient.getInsights(start, end, calendarIds);
       setInsights(data);
     } catch (err: unknown) {
       console.error('Error fetching insights:', err);
@@ -40,7 +45,7 @@ export function useCalendarInsights(
     } finally {
       setLoading(false);
     }
-  }, [range, enabled, accountsKey]);
+  }, [range, enabled, accountsKey, calendarIdsKey]);
 
   useEffect(() => {
     fetchInsights();

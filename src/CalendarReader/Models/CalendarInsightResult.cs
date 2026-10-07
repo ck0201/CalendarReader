@@ -90,6 +90,7 @@ public class ConflictEventSummary
     public DateTimeOffset End { get; set; }
     public string? HtmlLink { get; set; }
     public string AccountEmail { get; set; } = string.Empty;
+    public string CalendarName { get; set; } = string.Empty;
 }
 
 public class ScheduleSuggestion
