@@ -1,0 +1,30 @@
+# Top-most EditorConfig file
+root = true
+
+# Default rules for all files
+[*]
+indent_style = space
+indent_size = 4
+end_of_line = crlf
+charset = utf-8
+trim_trailing_whitespace = true
+insert_final_newline = true
+
+# Configuration, project and markup files
+[*.{json,yml,yaml,xml,props,targets,csproj,sln}]
+indent_size = 2
+
+# Web frontend assets
+[*.{html,css,js}]
+indent_size = 2
+
+# Markdown files
+[*.md]
+trim_trailing_whitespace = false
+
+# C# files
+[*.cs]
+indent_size = 4
+csharp_style_namespace_declarations = file_scoped:suggestion
+csharp_using_directive_placement = outside_namespace:suggestion
+dotnet_sort_system_directives_first = true

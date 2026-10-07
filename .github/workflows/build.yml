@@ -1,0 +1,30 @@
+name: Build & Test
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  build:
+    name: Build & Test (.NET 9)
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Check out repository
+      uses: actions/checkout@v4
+
+    - name: Setup .NET 9 SDK
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '9.0.x'
+
+    - name: Restore dependencies
+      run: dotnet restore CalendarReader.sln
+
+    - name: Build solution
+      run: dotnet build CalendarReader.sln --no-restore --configuration Release
+
+    - name: Run unit tests
+      run: dotnet test CalendarReader.sln --no-build --configuration Release --verbosity normal

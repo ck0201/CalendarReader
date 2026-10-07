@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CalendarReader — Understand Your Calendar</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <!-- Header / Navigation -->
+  <header class="app-header">
+    <div class="header-container">
+      <div class="brand">
+        <div class="logo-icon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+            <line x1="16" y1="2" x2="16" y2="6"></line>
+            <line x1="8" y1="2" x2="8" y2="6"></line>
+            <line x1="3" y1="10" x2="21" y2="10"></line>
+            <path d="M8 14h.01"></path>
+            <path d="M12 14h.01"></path>
+            <path d="M16 14h.01"></path>
+            <path d="M8 18h.01"></path>
+            <path d="M12 18h.01"></path>
+          </svg>
+        </div>
+        <span class="brand-title">CalendarReader</span>
+      </div>
+      
+      <div id="auth-actions" class="auth-actions hidden">
+        <span class="status-badge connected">
+          <span class="status-dot"></span> Google Connected
+        </span>
+        <button id="logout-btn" class="btn btn-subtle" title="Disconnect Google Calendar">
+          Disconnect
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Global Alert / Notice Container -->
+  <div class="container">
+    <div id="alert-banner" class="alert-banner hidden"></div>
+  </div>
+
+  <main class="main-content">
+    <!-- State 1: Landing State (Unauthenticated) -->
+    <section id="landing-view" class="landing-section">
+      <div class="landing-card">
+        <div class="landing-badge">Calendar Intelligence</div>
+        <h1 class="landing-title">Understand your calendar.</h1>
+        <p class="landing-subtitle">
+          Connect Google Calendar and discover where your time is going.
+        </p>
+
+        <div class="landing-actions">
+          <a id="connect-btn" href="/api/auth/login" class="btn btn-primary btn-large">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path>
+              <polyline points="10 17 15 12 10 7"></polyline>
+              <line x1="15" y1="12" x2="3" y2="12"></line>
+            </svg>
+            Connect Google Calendar
+          </a>
+        </div>
+
+        <div class="landing-footer-notes">
+          <div class="privacy-note">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+            </svg>
+            <span>Read-only calendar access. Never modifies your events. In-memory session.</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- State 2: Insights Dashboard (Authenticated) -->
+    <section id="dashboard-view" class="dashboard-section hidden">
+      <div class="container">
+        <!-- Dashboard Header & Range Controls -->
+        <div class="dashboard-controls-bar">
+          <div>
+            <h1 class="section-title">Calendar Insights</h1>
+            <p id="range-subtitle" class="section-subtitle">Analyzing your schedule</p>
+          </div>
+
+          <div class="time-range-selector">
+            <button class="range-btn active" data-range="week">This Week</button>
+            <button class="range-btn" data-range="today">Today</button>
+          </div>
+        </div>
+
+        <!-- Loading Spinner -->
+        <div id="loading-state" class="loading-state hidden">
+          <div class="spinner"></div>
+          <p>Analyzing calendar events...</p>
+        </div>
+
+        <!-- Insights Content Container -->
+        <div id="insights-content">
+          <!-- Summary Banner -->
+          <div class="summary-banner">
+            <div class="summary-stat">
+              <span id="summary-headline" class="summary-text">0 events · 0m scheduled</span>
+            </div>
+            <div id="summary-meta" class="summary-meta">
+              <!-- e.g. 0 all-day events -->
+            </div>
+          </div>
+
+          <!-- 4 Core Metric Cards -->
+          <div class="metrics-grid">
+            <!-- Metric 1: Scheduled Time -->
+            <div class="metric-card">
+              <div class="metric-header">
+                <span class="metric-label">Scheduled Time</span>
+                <div class="metric-icon scheduled">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <polyline points="12 6 12 12 16 14"></polyline>
+                  </svg>
+                </div>
+              </div>
+              <div id="metric-scheduled" class="metric-value">0m</div>
+              <div class="metric-caption">Total timed commitments</div>
+            </div>
+
+            <!-- Metric 2: Meeting Time -->
+            <div class="metric-card">
+              <div class="metric-header">
+                <span class="metric-label">Meeting Time</span>
+                <div class="metric-icon meetings">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                    <circle cx="9" cy="7" r="4"></circle>
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                  </svg>
+                </div>
+              </div>
+              <div id="metric-meeting" class="metric-value">0m</div>
+              <div id="metric-meeting-sub" class="metric-caption">Collaborative sessions</div>
+            </div>
+
+            <!-- Metric 3: Longest Focus Block -->
+            <div class="metric-card">
+              <div class="metric-header">
+                <span class="metric-label">Longest Focus Block</span>
+                <div class="metric-icon focus">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <circle cx="12" cy="12" r="6"></circle>
+                    <circle cx="12" cy="12" r="2"></circle>
+                  </svg>
+                </div>
+              </div>
+              <div id="metric-focus" class="metric-value">0m</div>
+              <div id="metric-focus-sub" class="metric-caption">Uninterrupted daytime window</div>
+            </div>
+
+            <!-- Metric 4: Busiest Day -->
+            <div class="metric-card">
+              <div class="metric-header">
+                <span class="metric-label">Busiest Day</span>
+                <div class="metric-icon busy">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                    <line x1="16" y1="2" x2="16" y2="6"></line>
+                    <line x1="8" y1="2" x2="8" y2="6"></line>
+                    <line x1="3" y1="10" x2="21" y2="10"></line>
+                  </svg>
+                </div>
+              </div>
+              <div id="metric-busiest" class="metric-value">-</div>
+              <div id="metric-busiest-sub" class="metric-caption">0m scheduled</div>
+            </div>
+          </div>
+
+          <!-- Section: What your calendar says -->
+          <div class="observations-section">
+            <div class="section-badge-header">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path>
+                <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path>
+              </svg>
+              <h2>What your calendar says</h2>
+            </div>
+            
+            <div id="observations-list" class="observations-container">
+              <!-- Generated observations populated here -->
+            </div>
+          </div>
+
+          <!-- Section: Calendar Tasks -->
+          <div class="tasks-section">
+            <div class="tasks-header">
+              <div class="tasks-title-group">
+                <div class="section-badge-header no-margin">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="9 11 12 14 22 4"></polyline>
+                    <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+                  </svg>
+                  <h2>Tasks in this Period</h2>
+                </div>
+                <span id="tasks-count-badge" class="badge">0 tasks</span>
+              </div>
+            </div>
+            <div id="tasks-list" class="tasks-list">
+              <!-- Tasks populated here -->
+            </div>
+          </div>
+
+          <!-- Section: Scheduled Events Breakdown -->
+          <div class="events-section">
+            <div class="events-header">
+              <div class="events-title-group">
+                <h2>Events in this Period</h2>
+                <span id="events-count-badge" class="badge">0 events</span>
+              </div>
+              <div class="event-filter-selector">
+                <button class="event-filter-btn active" data-event-filter="all">All Events</button>
+                <button class="event-filter-btn" data-event-filter="train">Train Journeys</button>
+                <button class="event-filter-btn" data-event-filter="other">Other Events</button>
+              </div>
+            </div>
+            <div id="events-list" class="events-list">
+              <!-- Event items populated here -->
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="app-footer">
+    <div class="container">
+      <p>CalendarReader · Minimal, transparent calendar intelligence</p>
+    </div>
+  </footer>
+
+  <script src="/js/app.js"></script>
+</body>
+</html>
