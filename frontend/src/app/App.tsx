@@ -9,7 +9,6 @@ import { SummaryBanner } from '../features/insights/SummaryBanner';
 import { MetricsGrid } from '../features/insights/MetricsGrid';
 import { ObservationsList } from '../features/insights/ObservationsList';
 import { ScheduleHealthSection } from '../features/schedule-health/ScheduleHealthSection';
-import { TasksSection } from '../features/tasks/TasksSection';
 import { EventsSection } from '../features/calendar/EventsSection';
 import { AlertBanner } from '../shared/components/AlertBanner';
 import { formatRangeLabel, getDateRange } from '../shared/utils/dateUtils';
@@ -29,18 +28,27 @@ export const App: React.FC = () => {
   } = useAuth();
 
   const [range, setRange] = useState<RangeType>('week');
+  const accountsKey = accounts.map((a) => `${a.accountId}:${a.requiresReauth}`).join(',');
   const {
     insights,
     loading: insightsLoading,
     error: insightsError,
+    refetch: refetchInsights,
     conflictingEventIds,
-  } = useCalendarInsights(range, isAuthenticated);
+  } = useCalendarInsights(range, isAuthenticated, accountsKey);
 
   const { start, end } = getDateRange(range);
   const rangeSubtitle = formatRangeLabel(start, end, range);
 
   const handleDisabledConnectClick = () => {
     setAlert('Google OAuth credentials must be configured before connecting.', 'error');
+  };
+
+  const handleDisconnectAccount = async (accountId: string, email: string) => {
+    const success = await disconnectAccount(accountId, email);
+    if (success) {
+      await refetchInsights();
+    }
   };
 
   const isMultiAccount = accounts.length > 1;
@@ -50,7 +58,7 @@ export const App: React.FC = () => {
       <Header
         isAuthenticated={isAuthenticated}
         accounts={accounts}
-        onDisconnectAccount={disconnectAccount}
+        onDisconnectAccount={handleDisconnectAccount}
         onLogout={logout}
       />
 
@@ -119,11 +127,6 @@ export const App: React.FC = () => {
 
                   <ScheduleHealthSection
                     health={insights.scheduleHealth}
-                    isMultiAccount={isMultiAccount}
-                  />
-
-                  <TasksSection
-                    tasks={insights.tasks || []}
                     isMultiAccount={isMultiAccount}
                   />
 

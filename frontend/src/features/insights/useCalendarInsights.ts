@@ -13,14 +13,18 @@ export interface UseCalendarInsightsReturn {
 
 export function useCalendarInsights(
   range: RangeType,
-  enabled: boolean
+  enabled: boolean,
+  accountsKey?: string
 ): UseCalendarInsightsReturn {
   const [insights, setInsights] = useState<CalendarInsightResult | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
   const fetchInsights = useCallback(async () => {
-    if (!enabled) return;
+    if (!enabled) {
+      setInsights(null);
+      return;
+    }
 
     const { start, end } = getDateRange(range);
     setLoading(true);
@@ -36,7 +40,7 @@ export function useCalendarInsights(
     } finally {
       setLoading(false);
     }
-  }, [range, enabled]);
+  }, [range, enabled, accountsKey]);
 
   useEffect(() => {
     fetchInsights();

@@ -10,7 +10,6 @@ using Google.Apis.Auth.OAuth2.Requests;
 using Google.Apis.Auth.OAuth2.Responses;
 using Google.Apis.Calendar.v3;
 using Google.Apis.Services;
-using Google.Apis.Tasks.v1;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -20,14 +19,12 @@ public class GoogleCalendarService : IGoogleCalendarService
     private const string EmailScope = "https://www.googleapis.com/auth/userinfo.email";
     private const string ProfileScope = "https://www.googleapis.com/auth/userinfo.profile";
     private const string ReadonlyCalendarScope = "https://www.googleapis.com/auth/calendar.readonly";
-    private const string ReadonlyTasksScope = "https://www.googleapis.com/auth/tasks.readonly";
     private static readonly string[] RequiredScopes =
     [
         OpenIdScope,
         EmailScope,
         ProfileScope,
-        ReadonlyCalendarScope,
-        ReadonlyTasksScope
+        ReadonlyCalendarScope
     ];
 
     private readonly GoogleAuthConfig _config;
@@ -190,31 +187,13 @@ public class GoogleCalendarService : IGoogleCalendarService
             .ToList();
     }
 
-    public async Task<IReadOnlyList<CalendarTask>> GetTasksAsync(
+    public Task<IReadOnlyList<CalendarTask>> GetTasksAsync(
         string sessionId,
         DateTimeOffset start,
         DateTimeOffset end,
         CancellationToken cancellationToken = default)
     {
-        var accounts = await _tokenStore.GetAllAccountTokensAsync(sessionId, cancellationToken);
-        if (accounts.Count == 0)
-        {
-            throw new UnauthorizedAccessException("Not authenticated or session has expired.");
-        }
-
-        var activeAccounts = accounts.Where(a => !a.RequiresReauth).ToList();
-        if (activeAccounts.Count == 0)
-        {
-            throw new UnauthorizedAccessException("All connected accounts require re-authorization.");
-        }
-
-        var fetchTasks = activeAccounts.Select(acc => FetchTasksForAccountAsync(sessionId, acc, start, end, cancellationToken));
-        var results = await Task.WhenAll(fetchTasks);
-
-        return results
-            .SelectMany(tasks => tasks)
-            .OrderBy(t => t.DueDate)
-            .ToList();
+        return Task.FromResult<IReadOnlyList<CalendarTask>>([]);
     }
 
     private async Task<IReadOnlyList<CalendarEvent>> FetchEventsForAccountAsync(
@@ -346,120 +325,6 @@ public class GoogleCalendarService : IGoogleCalendarService
         }
     }
 
-    private async Task<IReadOnlyList<CalendarTask>> FetchTasksForAccountAsync(
-        string sessionId,
-        AccountTokenData account,
-        DateTimeOffset start,
-        DateTimeOffset end,
-        CancellationToken ct)
-    {
-        try
-        {
-            var tokenResponse = new TokenResponse
-            {
-                AccessToken = account.AccessToken,
-                RefreshToken = account.RefreshToken,
-                IssuedUtc = account.IssuedUtc?.UtcDateTime ?? DateTime.UtcNow,
-                ExpiresInSeconds = account.ExpiresInSeconds
-            };
-
-            var flow = CreateFlow();
-            var credential = new UserCredential(flow, account.AccountId, tokenResponse);
-
-            using var tasksService = new TasksService(new BaseClientService.Initializer
-            {
-                HttpClientInitializer = credential,
-                ApplicationName = "CalendarReader"
-            });
-
-            var mappedTasks = new List<CalendarTask>();
-
-            var tasklistsRequest = tasksService.Tasklists.List();
-            var tasklists = await tasklistsRequest.ExecuteAsync(ct);
-
-            // If token refreshed automatically during the call, persist updated tokens
-            if (!string.Equals(tokenResponse.AccessToken, account.AccessToken, StringComparison.Ordinal))
-            {
-                account.AccessToken = tokenResponse.AccessToken;
-                account.IssuedUtc = tokenResponse.IssuedUtc;
-                account.ExpiresInSeconds = tokenResponse.ExpiresInSeconds;
-                await _tokenStore.SaveAccountTokenAsync(sessionId, account, ct);
-            }
-
-            if (tasklists?.Items != null)
-            {
-                var rfcMin = start.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'");
-                var rfcMax = end.UtcDateTime.AddDays(1).ToString("yyyy-MM-dd'T'HH:mm:ss'Z'");
-
-                foreach (var list in tasklists.Items)
-                {
-                    var tasksRequest = tasksService.Tasks.List(list.Id);
-                    tasksRequest.DueMin = rfcMin;
-                    tasksRequest.DueMax = rfcMax;
-                    tasksRequest.ShowCompleted = true;
-                    tasksRequest.ShowHidden = true;
-
-                    var googleTasks = await tasksRequest.ExecuteAsync(ct);
-                    if (googleTasks?.Items != null)
-                    {
-                        foreach (var item in googleTasks.Items)
-                        {
-                            if (string.IsNullOrWhiteSpace(item.Due))
-                            {
-                                continue;
-                            }
-
-                            if (!DateTimeOffset.TryParse(item.Due, CultureInfo.InvariantCulture, DateTimeStyles.None, out var dueDate))
-                            {
-                                continue;
-                            }
-
-                            if (dueDate.Date < start.Date || dueDate.Date > end.Date)
-                            {
-                                continue;
-                            }
-
-                            mappedTasks.Add(new CalendarTask
-                            {
-                                Id = $"{account.AccountId}_{item.Id ?? Guid.NewGuid().ToString()}",
-                                Title = string.IsNullOrWhiteSpace(item.Title) ? "(No Title)" : item.Title.Trim(),
-                                DueDate = dueDate,
-                                IsAllDay = true,
-                                IsCompleted = string.Equals(item.Status, "completed", StringComparison.OrdinalIgnoreCase),
-                                Description = item.Notes?.Trim(),
-                                HtmlLink = item.WebViewLink,
-                                AccountEmail = account.Email
-                            });
-                        }
-                    }
-                }
-            }
-
-            return mappedTasks;
-        }
-        catch (TokenResponseException trEx)
-        {
-            _logger.LogWarning("Token refresh failed while retrieving tasks for account {Email}: {Error}", account.Email, trEx.Error?.ErrorDescription ?? trEx.Message);
-            await _tokenStore.MarkRequiresReauthAsync(sessionId, account.AccountId, ct);
-            return [];
-        }
-        catch (GoogleApiException gEx) when (gEx.HttpStatusCode == System.Net.HttpStatusCode.Unauthorized)
-        {
-            _logger.LogWarning("Google Tasks API returned 401 Unauthorized for account {Email}: {Message}", account.Email, gEx.Message);
-            await _tokenStore.MarkRequiresReauthAsync(sessionId, account.AccountId, ct);
-            return [];
-        }
-        catch (GoogleApiException gEx)
-        {
-            _logger.LogWarning(gEx, "Google Tasks API call failed for account {Email} ({StatusCode}): {Message}", account.Email, gEx.HttpStatusCode, gEx.Message);
-            return [];
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Unexpected error retrieving tasks for account {Email}: {Message}", account.Email, ex.Message);
-            return [];
-        }
-    }
 
     private async Task<(string Sub, string Email, string Name, string? Picture)> GetGoogleUserInfoAsync(string accessToken, CancellationToken ct)
     {

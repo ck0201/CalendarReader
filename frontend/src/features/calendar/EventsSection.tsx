@@ -19,6 +19,10 @@ export const EventsSection: React.FC<EventsSectionProps> = ({
   const [trainLoading, setTrainLoading] = useState<boolean>(false);
   const [fetchedTrains, setFetchedTrains] = useState<CalendarEvent[] | null>(null);
 
+  useEffect(() => {
+    setFetchedTrains(null);
+  }, [events]);
+
   const [now] = useState(() => new Date());
   const todayStart = useMemo(
     () => new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0),
