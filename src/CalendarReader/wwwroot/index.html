@@ -117,6 +117,7 @@
           <div class="summary-banner">
             <div class="summary-stat">
               <span id="summary-headline" class="summary-text">0 events · 0m scheduled</span>
+              <span id="summary-health-badge" class="health-pill healthy">No Conflicts</span>
             </div>
             <div id="summary-meta" class="summary-meta">
               <!-- e.g. 0 all-day events -->
@@ -203,6 +204,57 @@
             
             <div id="observations-list" class="observations-container">
               <!-- Generated observations populated here -->
+            </div>
+          </div>
+
+          <!-- Section: Schedule Health & Conflicts -->
+          <div class="health-section">
+            <div class="health-header">
+              <div class="section-badge-header no-margin">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M22 12h-4l-3 9L9 3l-3 9H2"></path>
+                </svg>
+                <h2>Schedule Health &amp; Conflicts</h2>
+              </div>
+              <span id="health-count-badge" class="badge">0 conflicts</span>
+            </div>
+
+            <!-- Health Quick Stats Ribbon -->
+            <div class="health-ribbon">
+              <div class="health-stat-card">
+                <span class="health-stat-label">Total Conflicts</span>
+                <span id="stat-conflicts-count" class="health-stat-value">0</span>
+              </div>
+              <div class="health-stat-card">
+                <span class="health-stat-label">Conflict Time</span>
+                <span id="stat-conflicts-duration" class="health-stat-value">0m</span>
+              </div>
+              <div class="health-stat-card">
+                <span class="health-stat-label">Affected Events</span>
+                <span id="stat-affected-events" class="health-stat-value">0</span>
+              </div>
+              <div class="health-stat-card">
+                <span class="health-stat-label">Most Clashing Day</span>
+                <span id="stat-most-clashing-day" class="health-stat-value">None</span>
+              </div>
+            </div>
+
+            <!-- Daily Conflict Timeline Visualization Container -->
+            <div id="conflict-timeline-wrapper" class="conflict-timeline-wrapper hidden">
+              <div class="timeline-header">
+                <div class="timeline-title-group">
+                  <span class="timeline-title">Daily Conflict Timeline</span>
+                  <span class="timeline-subtitle">Visual inspection of overlapping commitments</span>
+                </div>
+              </div>
+              <div id="conflict-timeline" class="conflict-timeline-container">
+                <!-- Visualized day timelines populated here -->
+              </div>
+            </div>
+
+            <!-- Suggestions & Conflict Details Container -->
+            <div id="health-details-wrapper" class="health-details-wrapper">
+              <!-- Rendered conflict cards & deterministic suggestions populated here -->
             </div>
           </div>
 

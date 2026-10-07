@@ -22,6 +22,7 @@
   // Metrics DOM
   const summaryHeadline = document.getElementById('summary-headline');
   const summaryMeta = document.getElementById('summary-meta');
+  const summaryHealthBadge = document.getElementById('summary-health-badge');
   const metricScheduled = document.getElementById('metric-scheduled');
   const metricMeeting = document.getElementById('metric-meeting');
   const metricMeetingSub = document.getElementById('metric-meeting-sub');
@@ -36,11 +37,22 @@
   const eventsCountBadge = document.getElementById('events-count-badge');
   const eventFilterBtns = document.querySelectorAll('.event-filter-btn');
 
+  // Schedule Health DOM
+  const healthCountBadge = document.getElementById('health-count-badge');
+  const statConflictsCount = document.getElementById('stat-conflicts-count');
+  const statConflictsDuration = document.getElementById('stat-conflicts-duration');
+  const statAffectedEvents = document.getElementById('stat-affected-events');
+  const statMostClashingDay = document.getElementById('stat-most-clashing-day');
+  const conflictTimelineWrapper = document.getElementById('conflict-timeline-wrapper');
+  const conflictTimeline = document.getElementById('conflict-timeline');
+  const healthDetailsWrapper = document.getElementById('health-details-wrapper');
+
   let currentRange = 'week';
   let currentEvents = [];
   let currentEventFilter = 'all';
   let upcomingTrainJourneysCache = null;
   let connectedAccounts = [];
+  let conflictingEventIds = new Set();
 
   // -------------------------------------------------------------
   // Helpers
@@ -344,12 +356,264 @@
       observationsList.innerHTML = '<div class="empty-state">No observations available.</div>';
     }
 
-    // 4. Tasks
+    // 4. Schedule Health & Conflicts
+    renderScheduleHealth(data.scheduleHealth || {});
+
+    // 5. Tasks
     renderTasks(data.tasks || []);
 
-    // 5. Events breakdown list
+    // 6. Events breakdown list
     currentEvents = data.events || [];
     renderFilteredEvents();
+  }
+
+  function formatConflictTime(eventSummary) {
+    const start = new Date(eventSummary.start);
+    const end = new Date(eventSummary.end);
+    const timeOptions = { hour: 'numeric', minute: '2-digit', hour12: true };
+    const dateOptions = { month: 'short', day: 'numeric' };
+    const sameDay = start.toDateString() === end.toDateString();
+
+    if (sameDay) {
+      return `${start.toLocaleDateString([], dateOptions)} · ${start.toLocaleTimeString([], timeOptions)} – ${end.toLocaleTimeString([], timeOptions)}`;
+    }
+    return `${start.toLocaleDateString([], dateOptions)} ${start.toLocaleTimeString([], timeOptions)} – ${end.toLocaleDateString([], dateOptions)} ${end.toLocaleTimeString([], timeOptions)}`;
+  }
+
+  function renderScheduleHealth(health) {
+    const totalConflicts = health.totalConflicts || 0;
+    const conflicts = health.conflicts || [];
+    const suggestions = health.suggestions || [];
+    const conflictDurationStr = health.formattedConflictDuration || '0m';
+    const affectedEventsCount = health.affectedEventsCount || 0;
+    const mostClashingDay = health.mostConflictedDay || 'None';
+
+    // Populate set of conflicting event IDs for inline badges on event rows
+    conflictingEventIds.clear();
+    conflicts.forEach((c) => {
+      if (c.eventA && c.eventA.id) conflictingEventIds.add(c.eventA.id);
+      if (c.eventB && c.eventB.id) conflictingEventIds.add(c.eventB.id);
+    });
+
+    // 1. Update summary banner badge
+    if (summaryHealthBadge) {
+      if (totalConflicts > 0) {
+        summaryHealthBadge.className = 'health-pill warning';
+        summaryHealthBadge.textContent = `⚠️ ${totalConflicts} Conflict${totalConflicts === 1 ? '' : 's'} (${conflictDurationStr})`;
+      } else {
+        summaryHealthBadge.className = 'health-pill healthy';
+        summaryHealthBadge.textContent = '✓ Clash-Free';
+      }
+    }
+
+    // 2. Update health header badge
+    if (healthCountBadge) {
+      healthCountBadge.textContent = `${totalConflicts} conflict${totalConflicts === 1 ? '' : 's'}`;
+    }
+
+    // 3. Update quick stats ribbon
+    if (statConflictsCount) {
+      statConflictsCount.textContent = totalConflicts;
+      statConflictsCount.className = `health-stat-value ${totalConflicts > 0 ? 'danger' : 'success'}`;
+    }
+    if (statConflictsDuration) {
+      statConflictsDuration.textContent = conflictDurationStr;
+    }
+    if (statAffectedEvents) {
+      statAffectedEvents.textContent = affectedEventsCount;
+    }
+    if (statMostClashingDay) {
+      statMostClashingDay.textContent = mostClashingDay;
+    }
+
+    // 4. Render Daily Conflict Timeline
+    if (totalConflicts > 0 && conflictTimelineWrapper && conflictTimeline) {
+      conflictTimelineWrapper.classList.remove('hidden');
+      renderConflictTimeline(conflicts);
+    } else if (conflictTimelineWrapper) {
+      conflictTimelineWrapper.classList.add('hidden');
+      if (conflictTimeline) conflictTimeline.innerHTML = '';
+    }
+
+    // 5. Render Suggestions & Conflict Details
+    if (healthDetailsWrapper) {
+      healthDetailsWrapper.innerHTML = '';
+
+      // Suggestions list
+      if (suggestions.length > 0) {
+        suggestions.forEach((sug) => {
+          const card = document.createElement('div');
+          card.className = `suggestion-card ${escapeHtml(sug.severity || 'info')}`;
+
+          let iconSvg = '';
+          if (sug.severity === 'warning') {
+            iconSvg = '<svg class="suggestion-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>';
+          } else if (sug.severity === 'success') {
+            iconSvg = '<svg class="suggestion-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="9 11 12 14 22 4"></polyline></svg>';
+          } else {
+            iconSvg = '<svg class="suggestion-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>';
+          }
+
+          card.innerHTML = `
+            ${iconSvg}
+            <div class="suggestion-body">
+              <span class="suggestion-title">${escapeHtml(sug.title)}</span>
+              <span class="suggestion-desc">${escapeHtml(sug.description)}</span>
+            </div>
+          `;
+          healthDetailsWrapper.appendChild(card);
+        });
+      }
+
+      // Conflict items list
+      if (conflicts.length > 0) {
+        conflicts.forEach((c) => {
+          const card = document.createElement('div');
+          card.className = 'conflict-item-card';
+
+          const accountTag = (c.accountEmail && connectedAccounts.length > 1)
+            ? `<span class="tag tag-account">${escapeHtml(c.accountEmail)}</span>`
+            : '';
+
+          card.innerHTML = `
+            <div class="conflict-pair-info">
+              <div class="conflict-pair-titles">
+                <span>${escapeHtml(c.eventA.title)}</span>
+                <span class="conflict-clash-arrow">&harr;</span>
+                <span>${escapeHtml(c.eventB.title)}</span>
+              </div>
+              <div class="conflict-pair-times">
+                <span>${escapeHtml(formatConflictTime(c.eventA))}</span> vs <span>${escapeHtml(formatConflictTime(c.eventB))}</span>
+              </div>
+            </div>
+            <div class="conflict-badges-group">
+              ${accountTag}
+              <span class="conflict-duration-pill">${escapeHtml(c.formattedOverlapDuration)} Overlap</span>
+            </div>
+          `;
+          healthDetailsWrapper.appendChild(card);
+        });
+      } else if (suggestions.length === 0) {
+        healthDetailsWrapper.innerHTML = `
+          <div class="health-empty-state">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+              <polyline points="22 4 12 14.01 9 11.01"></polyline>
+            </svg>
+            <div>
+              <div class="health-empty-title">All commitments are clash-free</div>
+              <div class="health-empty-subtitle">No overlapping calendar events found in this period.</div>
+            </div>
+          </div>
+        `;
+      }
+    }
+  }
+
+  function renderConflictTimeline(conflicts) {
+    if (!conflictTimeline) return;
+    conflictTimeline.innerHTML = '';
+
+    // Group conflicts by calendar date of overlap
+    const conflictsByDay = new Map();
+    conflicts.forEach((c) => {
+      const oDate = new Date(c.overlapStart);
+      const dateKey = oDate.toDateString();
+      if (!conflictsByDay.has(dateKey)) {
+        conflictsByDay.set(dateKey, {
+          date: oDate,
+          conflicts: [],
+          eventsMap: new Map()
+        });
+      }
+      const dayData = conflictsByDay.get(dateKey);
+      dayData.conflicts.push(c);
+      if (c.eventA && c.eventA.id) dayData.eventsMap.set(c.eventA.id, c.eventA);
+      if (c.eventB && c.eventB.id) dayData.eventsMap.set(c.eventB.id, c.eventB);
+    });
+
+    conflictsByDay.forEach((dayData) => {
+      const dayCard = document.createElement('div');
+      dayCard.className = 'timeline-day-card';
+
+      const dateOptions = { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' };
+      const formattedDayTitle = dayData.date.toLocaleDateString(undefined, dateOptions);
+
+      // Determine day time boundaries across conflicting events
+      let minHour = 8;
+      let maxHour = 20;
+
+      dayData.eventsMap.forEach((ev) => {
+        const s = new Date(ev.start);
+        const e = new Date(ev.end);
+        if (s.getHours() < minHour) minHour = Math.max(0, s.getHours() - 1);
+        if (e.getHours() >= maxHour) maxHour = Math.min(24, e.getHours() + 1);
+      });
+
+      const dayStart = new Date(dayData.date.getFullYear(), dayData.date.getMonth(), dayData.date.getDate(), minHour, 0, 0);
+      const totalMs = (maxHour - minHour) * 3600 * 1000;
+
+      // Axis labels (every 2 hours)
+      let axisLabelsHtml = '';
+      for (let h = minHour; h <= maxHour; h += 2) {
+        const markDate = new Date(dayData.date.getFullYear(), dayData.date.getMonth(), dayData.date.getDate(), h, 0, 0);
+        const label = markDate.toLocaleTimeString([], { hour: 'numeric', hour12: true });
+        axisLabelsHtml += `<span class="timeline-axis-label">${escapeHtml(label)}</span>`;
+      }
+
+      // Event track bars
+      let eventBarsHtml = '';
+      const dayEvents = Array.from(dayData.eventsMap.values()).sort((a, b) => new Date(a.start) - new Date(b.start));
+
+      dayEvents.forEach((ev) => {
+        const evStart = new Date(ev.start);
+        const evEnd = new Date(ev.end);
+
+        const leftPct = Math.max(0, Math.min(100, ((evStart.getTime() - dayStart.getTime()) / totalMs) * 100));
+        const rawWidthPct = ((evEnd.getTime() - evStart.getTime()) / totalMs) * 100;
+        const widthPct = Math.max(4, Math.min(100 - leftPct, rawWidthPct));
+
+        const timeStr = `${evStart.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true })} – ${evEnd.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true })}`;
+
+        eventBarsHtml += `
+          <div class="timeline-event-bar-wrapper">
+            <div class="timeline-event-bar conflicted" style="left: ${leftPct.toFixed(1)}%; width: ${widthPct.toFixed(1)}%;" title="${escapeHtml(ev.title)} (${timeStr})">
+              <span class="timeline-event-bar-title">${escapeHtml(ev.title)}</span>
+              <span class="timeline-event-bar-time">${timeStr}</span>
+            </div>
+          </div>
+        `;
+      });
+
+      // Overlap banners for each conflict on this day
+      let overlapBannersHtml = '';
+      dayData.conflicts.forEach((c) => {
+        const oStart = new Date(c.overlapStart).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true });
+        const oEnd = new Date(c.overlapEnd).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true });
+        overlapBannersHtml += `
+          <div class="timeline-overlap-banner">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+            <span><strong>${escapeHtml(c.eventA.title)}</strong> &harr; <strong>${escapeHtml(c.eventB.title)}</strong>: ${escapeHtml(c.formattedOverlapDuration)} overlap (${oStart} – ${oEnd})</span>
+          </div>
+        `;
+      });
+
+      dayCard.innerHTML = `
+        <div class="timeline-day-header">
+          <span class="timeline-day-title">${escapeHtml(formattedDayTitle)}</span>
+          <span class="timeline-day-conflicts-pill">${dayData.conflicts.length} conflict${dayData.conflicts.length === 1 ? '' : 's'}</span>
+        </div>
+        <div class="timeline-axis">
+          ${axisLabelsHtml}
+        </div>
+        <div class="timeline-tracks-area">
+          ${eventBarsHtml}
+        </div>
+        ${overlapBannersHtml}
+      `;
+
+      conflictTimeline.appendChild(dayCard);
+    });
   }
 
   function renderTasks(tasks) {
@@ -476,6 +740,9 @@
       let tagsHtml = '';
       if (ev.accountEmail && connectedAccounts.length > 1) {
         tagsHtml += `<span class="tag tag-account" title="Account: ${escapeHtml(ev.accountEmail)}">${escapeHtml(ev.accountEmail)}</span>`;
+      }
+      if (conflictingEventIds.has(ev.id)) {
+        tagsHtml += '<span class="tag tag-conflict" title="This event conflicts with another commitment">Conflict</span>';
       }
       if (ev.isTrainJourney) {
         tagsHtml += '<span class="tag tag-train">Train Journey</span>';

@@ -17,6 +17,7 @@ public class CalendarInsightResult
     public List<string> Observations { get; set; } = new();
     public List<CalendarEvent> Events { get; set; } = new();
     public List<CalendarTask> Tasks { get; set; } = new();
+    public ScheduleHealthInfo ScheduleHealth { get; set; } = new();
 }
 
 public class FocusBlockInfo
@@ -52,3 +53,46 @@ public class AuthStatusResponse
     public string? MissingConfigMessage { get; set; }
     public List<ConnectedAccount> Accounts { get; set; } = [];
 }
+
+public class ScheduleHealthInfo
+{
+    public int TotalConflicts { get; set; }
+    public TimeSpan TotalConflictDuration { get; set; }
+    public string FormattedConflictDuration { get; set; } = "0m";
+    public int AffectedEventsCount { get; set; }
+    public int ConflictFreeDaysCount { get; set; }
+    public string MostConflictedDay { get; set; } = "None";
+    public bool HasTodayConflict { get; set; }
+    public List<ScheduleConflict> Conflicts { get; set; } = [];
+    public List<ScheduleSuggestion> Suggestions { get; set; } = [];
+}
+
+public class ScheduleConflict
+{
+    public string Id { get; set; } = string.Empty;
+    public ConflictEventSummary EventA { get; set; } = new();
+    public ConflictEventSummary EventB { get; set; } = new();
+    public DateTimeOffset OverlapStart { get; set; }
+    public DateTimeOffset OverlapEnd { get; set; }
+    public TimeSpan OverlapDuration { get; set; }
+    public string FormattedOverlapDuration { get; set; } = string.Empty;
+    public string AccountEmail { get; set; } = string.Empty;
+}
+
+public class ConflictEventSummary
+{
+    public string Id { get; set; } = string.Empty;
+    public string Title { get; set; } = string.Empty;
+    public DateTimeOffset Start { get; set; }
+    public DateTimeOffset End { get; set; }
+    public string? HtmlLink { get; set; }
+}
+
+public class ScheduleSuggestion
+{
+    public string Type { get; set; } = string.Empty; // "conflict", "back-to-back", "heavy-day", "healthy"
+    public string Title { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public string Severity { get; set; } = "warning"; // "warning", "info", "success"
+}
+

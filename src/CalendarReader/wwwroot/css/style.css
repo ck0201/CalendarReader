@@ -908,6 +908,399 @@ body {
 }
 
 /* -------------------------------------------------------------
+   Health Pill in Summary Banner
+   ------------------------------------------------------------- */
+.health-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 0.25rem 0.65rem;
+  border-radius: var(--radius-full);
+  margin-left: 0.75rem;
+  vertical-align: middle;
+}
+
+.health-pill.healthy {
+  background-color: var(--accent-success-bg);
+  color: var(--accent-success);
+  border: 1px solid rgba(16, 185, 129, 0.25);
+}
+
+.health-pill.warning {
+  background-color: var(--accent-danger-bg);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+/* -------------------------------------------------------------
+   Schedule Health & Conflicts Section
+   ------------------------------------------------------------- */
+.health-section {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 1.75rem 2rem;
+  margin-bottom: 2rem;
+}
+
+.health-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.5rem;
+}
+
+.health-ribbon {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1rem;
+  margin-bottom: 1.75rem;
+}
+
+@media (max-width: 768px) {
+  .health-ribbon {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 480px) {
+  .health-ribbon {
+    grid-template-columns: 1fr;
+  }
+}
+
+.health-stat-card {
+  background-color: rgba(15, 23, 42, 0.6);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 1rem 1.15rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.health-stat-label {
+  font-size: 0.775rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.health-stat-value {
+  font-size: 1.45rem;
+  font-weight: 800;
+  color: var(--text-main);
+  letter-spacing: -0.02em;
+}
+
+.health-stat-value.danger {
+  color: #f87171;
+}
+
+.health-stat-value.success {
+  color: var(--accent-success);
+}
+
+/* Daily Conflict Timeline */
+.conflict-timeline-wrapper {
+  background-color: rgba(15, 23, 42, 0.5);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 1.25rem 1.5rem;
+  margin-bottom: 1.75rem;
+}
+
+.timeline-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.25rem;
+}
+
+.timeline-title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.timeline-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.timeline-subtitle {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.conflict-timeline-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.timeline-day-card {
+  background-color: rgba(30, 41, 59, 0.6);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 1.15rem 1.25rem;
+}
+
+.timeline-day-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.timeline-day-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #e2e8f0;
+}
+
+.timeline-day-conflicts-pill {
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.2rem 0.55rem;
+  border-radius: var(--radius-full);
+  background-color: var(--accent-danger-bg);
+  color: #fca5a5;
+  border: 1px solid rgba(239, 68, 68, 0.25);
+}
+
+/* Time axis & track */
+.timeline-axis {
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.725rem;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 0.35rem;
+  margin-bottom: 0.75rem;
+}
+
+.timeline-axis-label {
+  font-variant-numeric: tabular-nums;
+}
+
+.timeline-tracks-area {
+  position: relative;
+  min-height: 70px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.25rem 0;
+}
+
+.timeline-event-bar-wrapper {
+  position: relative;
+  width: 100%;
+  height: 34px;
+  background-color: rgba(15, 23, 42, 0.3);
+  border-radius: var(--radius-sm);
+}
+
+.timeline-event-bar {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  border-radius: var(--radius-sm);
+  padding: 0.35rem 0.65rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.775rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+  transition: var(--transition);
+}
+
+.timeline-event-bar.conflicted {
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.25), rgba(245, 158, 11, 0.3));
+  border: 1px solid rgba(239, 68, 68, 0.55);
+  color: #fecaca;
+}
+
+.timeline-event-bar:not(.conflicted) {
+  background-color: rgba(99, 102, 241, 0.2);
+  border: 1px solid rgba(99, 102, 241, 0.4);
+  color: #e0e7ff;
+}
+
+.timeline-event-bar-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.timeline-event-bar-time {
+  font-size: 0.7rem;
+  opacity: 0.85;
+  margin-left: 0.5rem;
+  flex-shrink: 0;
+}
+
+.timeline-overlap-banner {
+  margin-top: 0.65rem;
+  padding: 0.5rem 0.85rem;
+  border-radius: var(--radius-sm);
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px dashed rgba(239, 68, 68, 0.4);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+  color: #fca5a5;
+}
+
+/* Conflict & Suggestion cards */
+.health-details-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.suggestion-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.85rem;
+  padding: 0.9rem 1.15rem;
+  border-radius: var(--radius-sm);
+  background-color: rgba(15, 23, 42, 0.6);
+  border-left: 4px solid var(--primary);
+  font-size: 0.9rem;
+}
+
+.suggestion-card.warning {
+  border-left-color: var(--accent-danger);
+  background-color: rgba(239, 68, 68, 0.08);
+}
+
+.suggestion-card.info {
+  border-left-color: var(--primary);
+  background-color: rgba(99, 102, 241, 0.08);
+}
+
+.suggestion-card.success {
+  border-left-color: var(--accent-success);
+  background-color: rgba(16, 185, 129, 0.08);
+}
+
+.suggestion-icon {
+  margin-top: 0.15rem;
+  flex-shrink: 0;
+}
+
+.suggestion-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.suggestion-title {
+  font-weight: 700;
+  color: var(--text-main);
+  font-size: 0.9rem;
+}
+
+.suggestion-desc {
+  color: #cbd5e1;
+  line-height: 1.45;
+}
+
+.conflict-item-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.95rem 1.15rem;
+  border-radius: var(--radius-sm);
+  background-color: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.conflict-pair-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.conflict-pair-titles {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.925rem;
+  font-weight: 600;
+  color: #f1f5f9;
+  flex-wrap: wrap;
+}
+
+.conflict-clash-arrow {
+  color: #f87171;
+  font-weight: 700;
+}
+
+.conflict-pair-times {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.conflict-badges-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.conflict-duration-pill {
+  font-size: 0.775rem;
+  font-weight: 700;
+  padding: 0.25rem 0.65rem;
+  border-radius: var(--radius-full);
+  background-color: var(--accent-danger-bg);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.health-empty-state {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.5rem 1.75rem;
+  background-color: rgba(16, 185, 129, 0.08);
+  border: 1px solid rgba(16, 185, 129, 0.2);
+  border-radius: var(--radius-md);
+  color: #a7f3d0;
+}
+
+.health-empty-title {
+  font-weight: 700;
+  font-size: 1rem;
+  color: #34d399;
+}
+
+.health-empty-subtitle {
+  font-size: 0.875rem;
+  color: #cbd5e1;
+}
+
+/* Event list conflict tag */
+.tag-conflict {
+  background-color: var(--accent-danger-bg);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.35);
+}
+
+/* -------------------------------------------------------------
    Footer
    ------------------------------------------------------------- */
 .app-footer {
