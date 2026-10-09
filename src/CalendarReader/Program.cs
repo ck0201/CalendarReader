@@ -2,6 +2,7 @@ using CalendarReader.Endpoints;
 using CalendarReader.Models;
 using CalendarReader.Services;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -81,11 +82,30 @@ builder.Services.AddSingleton<ICalendarAnalysisService, CalendarAnalysisService>
 builder.Services.AddScoped<IGoogleCalendarService, GoogleCalendarService>();
 builder.Services.AddSingleton<IDeterministicBriefingFallbackGenerator, DeterministicBriefingFallbackGenerator>();
 builder.Services.AddSingleton<IAiBriefingCache, AiBriefingCache>();
-builder.Services.AddHttpClient<IAiBriefingService, AiBriefingService>();
-
-var app = builder.Build();
+builder.Services.AddHttpClient<IAiBriefingService, AiBriefingService>(client =>
+{
+    client.MaxResponseContentBufferSize = 1024 * 1024; // 1 MiB cap
+});
 
 const string SessionCookieName = "cr_session";
+
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.OnRejected = async (context, token) =>
+    {
+        context.HttpContext.Response.ContentType = "application/json";
+        await context.HttpContext.Response.WriteAsJsonAsync(new
+        {
+            error = "Rate limit exceeded. Maximum of 5 briefing requests per minute per session. Please wait before trying again."
+        }, cancellationToken: token);
+    };
+
+    options.AddPolicy(BriefingRateLimiter.PolicyName, httpContext =>
+        BriefingRateLimiter.GetPartition(httpContext, SessionCookieName));
+});
+
+var app = builder.Build();
 
 string GetOrCreateSessionId(HttpContext context)
 {
@@ -109,6 +129,7 @@ string GetOrCreateSessionId(HttpContext context)
 // Static Files & Default Page (serves wwwroot/index.html)
 app.UseDefaultFiles();
 app.UseStaticFiles();
+app.UseRateLimiter();
 
 // -------------------------------------------------------------
 // Authentication Endpoints
@@ -434,6 +455,7 @@ app.MapGet("/api/calendar/briefing", (
         briefingCache,
         tokenStore,
         loggerFactory.CreateLogger("CalendarBriefingEndpoint"),
-        ct));
+        ct))
+    .RequireRateLimiting(BriefingRateLimiter.PolicyName);
 
 app.Run();

@@ -36,20 +36,29 @@ public class AiBriefingCache : IAiBriefingCache
 
         var normalizedStart = start.ToUniversalTime().ToString("yyyyMMddHHmmss");
         var normalizedEnd = end.ToUniversalTime().ToString("yyyyMMddHHmmss");
-        var calendarsKey = calendarIds != null && calendarIds.Count > 0
+
+        // Pseudonymize session ID with SHA-256 to avoid raw session tokens in cache keys
+        var sessionHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(sessionId)))[..16];
+
+        // Pseudonymize calendar IDs with SHA-256 to avoid raw email addresses in cache keys
+        var rawCalendars = calendarIds != null && calendarIds.Count > 0
             ? string.Join(",", calendarIds.OrderBy(c => c, StringComparer.OrdinalIgnoreCase))
             : "all";
 
+        var calendarsHash = rawCalendars == "all"
+            ? "all"
+            : Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(rawCalendars)))[..16];
+
         var fingerprint = ComputeSnapshotFingerprint(snapshot);
 
-        return $"briefing:{sessionId}:{normalizedStart}:{normalizedEnd}:{calendarsKey}:{fingerprint}";
+        return $"briefing:{sessionHash}:{normalizedStart}:{normalizedEnd}:{calendarsHash}:{fingerprint}";
     }
 
     public bool TryGet(string cacheKey, out AiBriefingResult result)
     {
         if (_memoryCache.TryGetValue(cacheKey, out AiBriefingResult? cached) && cached != null)
         {
-            _logger.LogDebug("Briefing cache hit for key {CacheKey}", cacheKey);
+            _logger.LogDebug("Briefing cache hit for entry tag {KeyTag}", ComputeKeyTag(cacheKey));
             result = CloneBriefing(cached, isCached: true);
             return true;
         }
@@ -71,7 +80,12 @@ public class AiBriefingCache : IAiBriefingCache
 
         var stored = CloneBriefing(result, isCached: false);
         _memoryCache.Set(cacheKey, stored, entryOptions);
-        _logger.LogDebug("Briefing cached with key {CacheKey} and TTL {TtlMinutes}m", cacheKey, ttl.TotalMinutes);
+        _logger.LogDebug("Briefing cached with entry tag {KeyTag} and TTL {TtlMinutes}m", ComputeKeyTag(cacheKey), ttl.TotalMinutes);
+    }
+
+    private static string ComputeKeyTag(string cacheKey)
+    {
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(cacheKey)))[..8];
     }
 
     private static string ComputeSnapshotFingerprint(ScheduleSnapshot snapshot)

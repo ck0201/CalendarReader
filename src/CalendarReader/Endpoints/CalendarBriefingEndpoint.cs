@@ -29,6 +29,8 @@ public static class CalendarBriefingEndpoint
             return Results.Unauthorized();
         }
 
+        // Explicit start and end query parameters are strictly required for the AI briefing endpoint
+        // to prevent unintended AI provider invocations and uncontrolled token consumption.
         if (!start.HasValue || !end.HasValue)
         {
             return Results.BadRequest(new { error = "Both 'start' and 'end' date query parameters are required." });

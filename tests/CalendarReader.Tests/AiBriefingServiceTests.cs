@@ -581,4 +581,77 @@ public class AiBriefingServiceTests
         Assert.Contains("Recurring meetings consume 65%", fallback.SchedulingSuggestions[0]);
         Assert.Contains("Protect your 1h 0m focus block on Friday", fallback.SchedulingSuggestions[1]);
     }
+
+    [Fact]
+    public async Task GenerateBriefingAsync_OversizedContentLengthHeader_ReturnsFallbackResult()
+    {
+        var handler = new MockHttpMessageHandler((_, _) =>
+        {
+            var response = new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new ByteArrayContent(new byte[100])
+            };
+            // Set header indicating content length exceeds 1 MiB limit
+            response.Content.Headers.ContentLength = 2 * 1024 * 1024;
+            return Task.FromResult(response);
+        });
+
+        var config = Options.Create(new AiBriefingConfig
+        {
+            ApiKey = "test-gemini-key",
+            Model = "gemini-3.8-flash"
+        });
+
+        var service = new AiBriefingService(
+            new HttpClient(handler),
+            config,
+            _fallbackGenerator,
+            NullLogger<AiBriefingService>.Instance);
+
+        var snapshot = CreateSampleSnapshot();
+
+        var result = await service.GenerateBriefingAsync(snapshot);
+
+        Assert.Equal(1, handler.RequestCount);
+        Assert.True(result.IsFallback, "Oversized content length response must trigger deterministic fallback");
+        Assert.False(string.IsNullOrWhiteSpace(result.Headline));
+    }
+
+    [Fact]
+    public async Task GenerateBriefingAsync_OversizedStreamingBody_ReturnsFallbackResult()
+    {
+        // 1.2 MiB of streaming data (exceeds MaxResponseSizeBytes of 1 MiB)
+        var oversizedPayload = new byte[(int)(1.2 * 1024 * 1024)];
+        Array.Fill<byte>(oversizedPayload, (byte)'A');
+
+        var handler = new MockHttpMessageHandler((_, _) =>
+        {
+            var response = new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                // StreamContent without explicit ContentLength to test streaming overflow detection
+                Content = new StreamContent(new MemoryStream(oversizedPayload))
+            };
+            return Task.FromResult(response);
+        });
+
+        var config = Options.Create(new AiBriefingConfig
+        {
+            ApiKey = "test-gemini-key",
+            Model = "gemini-3.8-flash"
+        });
+
+        var service = new AiBriefingService(
+            new HttpClient(handler),
+            config,
+            _fallbackGenerator,
+            NullLogger<AiBriefingService>.Instance);
+
+        var snapshot = CreateSampleSnapshot();
+
+        var result = await service.GenerateBriefingAsync(snapshot);
+
+        Assert.Equal(1, handler.RequestCount);
+        Assert.True(result.IsFallback, "Oversized streaming body exceeding 1 MiB must trigger deterministic fallback");
+        Assert.False(string.IsNullOrWhiteSpace(result.Headline));
+    }
 }

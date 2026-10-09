@@ -9,6 +9,8 @@ using Microsoft.Extensions.Options;
 
 public class AiBriefingService : IAiBriefingService
 {
+    public const long MaxResponseSizeBytes = 1024 * 1024; // 1 MiB
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -115,7 +117,7 @@ public class AiBriefingService : IAiBriefingService
             HttpResponseMessage response;
             try
             {
-                response = await _httpClient.SendAsync(request, linkedCts.Token);
+                response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, linkedCts.Token);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -137,7 +139,12 @@ public class AiBriefingService : IAiBriefingService
                     return _fallbackGenerator.GenerateFallback(snapshot);
                 }
 
-                var responseBody = await response.Content.ReadAsStringAsync(linkedCts.Token);
+                var responseBody = await ReadResponseBodyBoundedAsync(response, MaxResponseSizeBytes, linkedCts.Token);
+                if (responseBody == null)
+                {
+                    return _fallbackGenerator.GenerateFallback(snapshot);
+                }
+
                 return ParseProviderResponse(responseBody, snapshot);
             }
         }
@@ -202,6 +209,34 @@ public class AiBriefingService : IAiBriefingService
             _logger.LogWarning("Failed to parse JSON response from AI provider. Using deterministic fallback.");
             return _fallbackGenerator.GenerateFallback(snapshot);
         }
+    }
+
+    private async Task<string?> ReadResponseBodyBoundedAsync(HttpResponseMessage response, long maxBytes, CancellationToken ct)
+    {
+        if (response.Content.Headers.ContentLength.HasValue && response.Content.Headers.ContentLength.Value > maxBytes)
+        {
+            _logger.LogWarning("AI provider response Content-Length ({Length} bytes) exceeds maximum limit of {MaxBytes} bytes. Using deterministic fallback.",
+                response.Content.Headers.ContentLength.Value, maxBytes);
+            return null;
+        }
+
+        await using var stream = await response.Content.ReadAsStreamAsync(ct);
+        using var memoryStream = new MemoryStream();
+        var buffer = new byte[16384];
+        int bytesRead;
+
+        while ((bytesRead = await stream.ReadAsync(buffer.AsMemory(0, buffer.Length), ct)) > 0)
+        {
+            if (memoryStream.Length + bytesRead > maxBytes)
+            {
+                _logger.LogWarning("AI provider response stream exceeded maximum size limit of {MaxBytes} bytes. Using deterministic fallback.", maxBytes);
+                return null;
+            }
+
+            memoryStream.Write(buffer, 0, bytesRead);
+        }
+
+        return System.Text.Encoding.UTF8.GetString(memoryStream.ToArray());
     }
 
     private static bool TryValidatePayload(AiBriefingPayload? payload, out AiBriefingResult result)

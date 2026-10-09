@@ -3,6 +3,7 @@ namespace CalendarReader.Tests;
 using CalendarReader.Models;
 using CalendarReader.Services;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Xunit;
@@ -56,8 +57,10 @@ public class AiBriefingCacheTests
         var key2 = _cache.CreateCacheKey("session-user-2", start, end, null, snapshot);
 
         Assert.NotEqual(key1, key2);
-        Assert.StartsWith("briefing:session-user-1:", key1);
-        Assert.StartsWith("briefing:session-user-2:", key2);
+        Assert.StartsWith("briefing:", key1);
+        Assert.StartsWith("briefing:", key2);
+        Assert.DoesNotContain("session-user-1", key1);
+        Assert.DoesNotContain("session-user-2", key2);
     }
 
     [Fact]
@@ -220,6 +223,83 @@ public class AiBriefingCacheTests
         var key2 = _cache.CreateCacheKey("session-1", start, end, null, snapshot2);
 
         Assert.NotEqual(key1, key2);
+    }
+
+    [Fact]
+    public void CreateCacheKey_PseudonymizesSessionIdAndCalendarEmails()
+    {
+        var snapshot = CreateSnapshot();
+        var start = new DateTimeOffset(2026, 10, 5, 0, 0, 0, TimeSpan.Zero);
+        var end = new DateTimeOffset(2026, 10, 7, 0, 0, 0, TimeSpan.Zero);
+        const string rawSession = "secret-session-token-998877";
+        string[] rawCalendars = ["executive@company.com", "private-calendar@gmail.com"];
+
+        var key = _cache.CreateCacheKey(rawSession, start, end, rawCalendars, snapshot);
+
+        // Raw tokens and email addresses must NOT appear in the cache key
+        Assert.DoesNotContain("secret-session-token-998877", key);
+        Assert.DoesNotContain("executive@company.com", key);
+        Assert.DoesNotContain("private-calendar@gmail.com", key);
+
+        // Key must preserve normalized dates and briefing prefix
+        Assert.StartsWith("briefing:", key);
+        Assert.Contains("20261005000000", key);
+        Assert.Contains("20261007000000", key);
+    }
+
+    [Fact]
+    public void CacheLogging_DoesNotEmitRawSessionOrCalendarIdsOrCompleteCacheKey()
+    {
+        var capturedLogs = new List<string>();
+        var testLogger = new TestCaptureLogger<AiBriefingCache>(capturedLogs);
+        var config = Options.Create(new AiBriefingConfig { CacheTtlMinutes = 5 });
+        var cacheWithLogger = new AiBriefingCache(_memoryCache, config, testLogger);
+
+        var snapshot = CreateSnapshot();
+        var start = new DateTimeOffset(2026, 10, 5, 0, 0, 0, TimeSpan.Zero);
+        var end = new DateTimeOffset(2026, 10, 7, 0, 0, 0, TimeSpan.Zero);
+        const string rawSession = "sensitive-cookie-session-abc";
+        string[] rawCalendars = ["user.personal@example.com"];
+
+        var key = cacheWithLogger.CreateCacheKey(rawSession, start, end, rawCalendars, snapshot);
+        var briefing = new AiBriefingResult { Headline = "Test Headline" };
+
+        cacheWithLogger.Set(key, briefing);
+        cacheWithLogger.TryGet(key, out _);
+
+        Assert.NotEmpty(capturedLogs);
+        foreach (var log in capturedLogs)
+        {
+            // Logs must never emit the raw session cookie value
+            Assert.DoesNotContain(rawSession, log);
+            // Logs must never emit the raw calendar email address
+            Assert.DoesNotContain("user.personal@example.com", log);
+            // Logs must not emit the full cache key (which includes the complete fingerprint and dates)
+            Assert.DoesNotContain(key, log);
+        }
+    }
+
+    private class TestCaptureLogger<T> : ILogger<T>
+    {
+        private readonly List<string> _logs;
+
+        public TestCaptureLogger(List<string> logs)
+        {
+            _logs = logs;
+        }
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            _logs.Add(formatter(state, exception));
+        }
     }
 }
 
