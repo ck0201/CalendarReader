@@ -659,6 +659,7 @@ public class CalendarAnalysisService : ICalendarAnalysisService
             TotalTasksCount = insights.Tasks?.Count ?? 0,
             PendingTasksCount = insights.Tasks?.Count(t => !t.IsCompleted) ?? 0,
             CompletedTasksCount = insights.Tasks?.Count(t => t.IsCompleted) ?? 0,
+            Observations = insights.Observations != null ? [.. insights.Observations] : [],
             TitlesIncluded = includeTitles
         };
 

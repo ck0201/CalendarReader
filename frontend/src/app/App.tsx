@@ -8,6 +8,8 @@ import { useCalendarInsights } from '../features/insights/useCalendarInsights';
 import { useCalendars } from '../features/calendar/useCalendars';
 import { CalendarFilterBar } from '../features/calendar/CalendarFilterBar';
 import { SummaryBanner } from '../features/insights/SummaryBanner';
+import { useAiBriefing } from '../features/briefing/useAiBriefing';
+import { AiBriefingCard } from '../features/briefing/AiBriefingCard';
 import { MetricsGrid } from '../features/insights/MetricsGrid';
 import { ObservationsList } from '../features/insights/ObservationsList';
 import { ScheduleHealthSection } from '../features/schedule-health/ScheduleHealthSection';
@@ -51,6 +53,13 @@ export const App: React.FC = () => {
     conflictingEventIds,
   } = useCalendarInsights(range, isAuthenticated, accountsKey, selectedCalendarIds);
 
+  const {
+    briefing,
+    loading: briefingLoading,
+    error: briefingError,
+    refetch: refetchBriefing,
+  } = useAiBriefing(range, isAuthenticated, accountsKey, selectedCalendarIds);
+
   const { start, end } = getDateRange(range);
   const rangeSubtitle = formatRangeLabel(start, end, range);
 
@@ -61,7 +70,7 @@ export const App: React.FC = () => {
   const handleDisconnectAccount = async (accountId: string, email: string) => {
     const success = await disconnectAccount(accountId, email);
     if (success) {
-      await refetchInsights();
+      await Promise.all([refetchInsights(), refetchBriefing()]);
     }
   };
 
@@ -143,6 +152,13 @@ export const App: React.FC = () => {
               {insights && !insightsLoading && (
                 <div id="insights-content">
                   <SummaryBanner insights={insights} />
+
+                  <AiBriefingCard
+                    briefing={briefing}
+                    loading={briefingLoading}
+                    error={briefingError}
+                    onRetry={refetchBriefing}
+                  />
 
                   <MetricsGrid insights={insights} />
 

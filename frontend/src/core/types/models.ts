@@ -142,5 +142,16 @@ export interface CalendarInsightResult {
   scheduleHealth: ScheduleHealthInfo;
 }
 
+export interface AiBriefingResult {
+  headline: string;
+  narrativeSummary: string;
+  preparationPriorities: string[];
+  schedulingSuggestions: string[];
+  energyProfile: string;
+  generatedAtUtc: string;
+  isCached: boolean;
+  isFallback: boolean;
+}
+
 export type RangeType = 'today' | 'week';
 export type EventFilterType = 'all' | 'train' | 'other';

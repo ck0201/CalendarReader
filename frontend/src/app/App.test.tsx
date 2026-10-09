@@ -4,11 +4,13 @@ import { App } from './App';
 import * as authHook from '../features/auth/useAuth';
 import * as calendarsHook from '../features/calendar/useCalendars';
 import * as insightsHook from '../features/insights/useCalendarInsights';
-import type { CalendarInsightResult } from '../core/types/models';
+import * as briefingHook from '../features/briefing/useAiBriefing';
+import type { CalendarInsightResult, AiBriefingResult } from '../core/types/models';
 
 vi.mock('../features/auth/useAuth');
 vi.mock('../features/calendar/useCalendars');
 vi.mock('../features/insights/useCalendarInsights');
+vi.mock('../features/briefing/useAiBriefing');
 
 describe('App dashboard integration with TasksSection', () => {
   beforeEach(() => {
@@ -133,7 +135,29 @@ describe('App dashboard integration with TasksSection', () => {
       conflictingEventIds: new Set(),
     });
 
+    const mockBriefing: AiBriefingResult = {
+      headline: 'Executive Weekly Overview',
+      narrativeSummary: 'Balanced schedule with focus on Thursday.',
+      preparationPriorities: ['Review sprint deck'],
+      schedulingSuggestions: ['Protect focus block'],
+      energyProfile: 'Balanced',
+      generatedAtUtc: '2026-10-09T17:00:00Z',
+      isCached: false,
+      isFallback: false,
+    };
+
+    vi.spyOn(briefingHook, 'useAiBriefing').mockReturnValue({
+      briefing: mockBriefing,
+      loading: false,
+      error: null,
+      refetch: vi.fn(),
+    });
+
     render(<App />);
+
+    // Verify AiBriefingCard is rendered within dashboard
+    expect(screen.getByText('AI Schedule Briefing')).toBeInTheDocument();
+    expect(screen.getByText('Executive Weekly Overview')).toBeInTheDocument();
 
     // Verify TasksSection is rendered within dashboard
     expect(screen.getByText('Tasks in this Period')).toBeInTheDocument();

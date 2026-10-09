@@ -1,4 +1,5 @@
 import type {
+  AiBriefingResult,
   AuthStatusResponse,
   CalendarEvent,
   CalendarInsightResult,
@@ -84,5 +85,13 @@ export const calendarApiClient = {
   async getTasks(start: Date, end: Date): Promise<CalendarTask[]> {
     const url = `/api/calendar/tasks?start=${encodeURIComponent(start.toISOString())}&end=${encodeURIComponent(end.toISOString())}`;
     return request<CalendarTask[]>(url);
+  },
+
+  async getBriefing(start: Date, end: Date, calendarIds?: string[], signal?: AbortSignal): Promise<AiBriefingResult> {
+    let url = `/api/calendar/briefing?start=${encodeURIComponent(start.toISOString())}&end=${encodeURIComponent(end.toISOString())}`;
+    if (calendarIds && calendarIds.length > 0) {
+      url += `&calendars=${encodeURIComponent(calendarIds.join(','))}`;
+    }
+    return request<AiBriefingResult>(url, { signal });
   },
 };

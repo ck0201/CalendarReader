@@ -64,6 +64,9 @@ public class ScheduleSnapshot
     // Daily temporal breakdown
     public List<DayScheduleSnapshot> Days { get; set; } = [];
 
+    // Authoritative observations (directly sourced from verified CalendarInsightResult)
+    public List<string> Observations { get; set; } = [];
+
     // Indicates whether titles were explicitly requested and included
     public bool TitlesIncluded { get; set; }
 }

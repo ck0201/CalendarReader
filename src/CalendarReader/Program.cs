@@ -1,3 +1,4 @@
+using CalendarReader.Endpoints;
 using CalendarReader.Models;
 using CalendarReader.Services;
 using Microsoft.AspNetCore.DataProtection;
@@ -29,12 +30,58 @@ builder.Services.Configure<GoogleAuthConfig>(options =>
     options.RedirectUri = GetConfigValue("GOOGLE_REDIRECT_URI", "RedirectUri", "http://localhost:5000/api/auth/callback");
 });
 
+// Configure AI Briefing settings from configuration, user secrets, or environment variables
+builder.Services.Configure<AiBriefingConfig>(options =>
+{
+    var configSection = builder.Configuration.GetSection("Ai");
+
+    string GetConfigValue(string flatKey, string sectionKey, string defaultValue = "")
+    {
+        var val = builder.Configuration[flatKey];
+        if (string.IsNullOrWhiteSpace(val))
+        {
+            val = configSection[sectionKey];
+        }
+        if (string.IsNullOrWhiteSpace(val))
+        {
+            val = Environment.GetEnvironmentVariable(flatKey);
+        }
+        return string.IsNullOrWhiteSpace(val) ? defaultValue : val;
+    }
+
+    options.ApiKey = GetConfigValue("GEMINI_API_KEY", "ApiKey");
+    if (string.IsNullOrWhiteSpace(options.ApiKey))
+    {
+        options.ApiKey = GetConfigValue("AI_API_KEY", "ApiKey");
+    }
+    options.Model = GetConfigValue("GEMINI_MODEL", "Model", "gemini-3.8-flash");
+
+    var timeoutStr = GetConfigValue("AI_TIMEOUT_SECONDS", "TimeoutSeconds", "15");
+    if (int.TryParse(timeoutStr, out var timeout) && timeout > 0)
+    {
+        options.TimeoutSeconds = timeout;
+    }
+
+    var ttlStr = GetConfigValue("AI_CACHE_TTL_MINUTES", "CacheTtlMinutes", "5");
+    if (int.TryParse(ttlStr, out var ttl) && ttl > 0)
+    {
+        options.CacheTtlMinutes = ttl;
+    }
+});
+
 // Register Application Services
 builder.Services.AddDataProtection();
 builder.Services.AddHttpClient();
+builder.Services.AddMemoryCache(options =>
+{
+    options.SizeLimit = 1000;
+});
 builder.Services.AddSingleton<IAccountTokenStore, SqliteAccountTokenStore>();
 builder.Services.AddSingleton<ICalendarAnalysisService, CalendarAnalysisService>();
 builder.Services.AddScoped<IGoogleCalendarService, GoogleCalendarService>();
+builder.Services.AddSingleton<IDeterministicBriefingFallbackGenerator, DeterministicBriefingFallbackGenerator>();
+builder.Services.AddSingleton<IAiBriefingCache, AiBriefingCache>();
+builder.Services.AddHttpClient<IAiBriefingService, AiBriefingService>();
 
 var app = builder.Build();
 
@@ -363,5 +410,30 @@ app.MapGet("/api/calendar/insights", async (
         return Results.Problem(detail: ex.Message, title: "Failed to generate calendar insights.");
     }
 });
+
+app.MapGet("/api/calendar/briefing", (
+    HttpContext context,
+    DateTimeOffset? start,
+    DateTimeOffset? end,
+    string? calendars,
+    IGoogleCalendarService calendarService,
+    ICalendarAnalysisService analysisService,
+    IAiBriefingService briefingService,
+    IAiBriefingCache briefingCache,
+    IAccountTokenStore tokenStore,
+    ILoggerFactory loggerFactory,
+    CancellationToken ct) =>
+    CalendarBriefingEndpoint.HandleAsync(
+        context,
+        start,
+        end,
+        calendars,
+        calendarService,
+        analysisService,
+        briefingService,
+        briefingCache,
+        tokenStore,
+        loggerFactory.CreateLogger("CalendarBriefingEndpoint"),
+        ct));
 
 app.Run();
