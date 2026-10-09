@@ -11,6 +11,7 @@ import { SummaryBanner } from '../features/insights/SummaryBanner';
 import { MetricsGrid } from '../features/insights/MetricsGrid';
 import { ObservationsList } from '../features/insights/ObservationsList';
 import { ScheduleHealthSection } from '../features/schedule-health/ScheduleHealthSection';
+import { TasksSection } from '../features/tasks/TasksSection';
 import { EventsSection } from '../features/calendar/EventsSection';
 import { AlertBanner } from '../shared/components/AlertBanner';
 import { formatRangeLabel, getDateRange } from '../shared/utils/dateUtils';
@@ -149,6 +150,11 @@ export const App: React.FC = () => {
 
                   <ScheduleHealthSection
                     health={insights.scheduleHealth}
+                    isMultiAccount={isMultiAccount}
+                  />
+
+                  <TasksSection
+                    tasks={insights.tasks || []}
                     isMultiAccount={isMultiAccount}
                   />
 

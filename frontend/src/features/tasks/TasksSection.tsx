@@ -3,12 +3,12 @@ import type { CalendarTask } from '../../core/types/models';
 import { TaskRow } from './TaskRow';
 
 interface TasksSectionProps {
-  tasks: CalendarTask[];
+  tasks?: CalendarTask[];
   isMultiAccount: boolean;
 }
 
 export const TasksSection: React.FC<TasksSectionProps> = ({
-  tasks,
+  tasks = [],
   isMultiAccount,
 }) => {
   return (

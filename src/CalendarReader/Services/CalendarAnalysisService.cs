@@ -624,4 +624,154 @@ public class CalendarAnalysisService : ICalendarAnalysisService
 
         return suggestions;
     }
+
+    public ScheduleSnapshot CreateScheduleSnapshot(CalendarInsightResult insights, bool includeTitles = false)
+    {
+        ArgumentNullException.ThrowIfNull(insights);
+
+        var snapshot = new ScheduleSnapshot
+        {
+            StartDate = insights.StartDate,
+            EndDate = insights.EndDate,
+            PeriodLabel = $"{insights.StartDate:yyyy-MM-dd} to {insights.EndDate:yyyy-MM-dd}",
+            TotalEventsCount = insights.TotalEvents,
+            TimedEventsCount = insights.TimedEventsCount,
+            AllDayEventsCount = insights.AllDayEventsCount,
+            TotalScheduledTimeFormatted = insights.FormattedScheduledTime,
+            TotalMeetingTimeFormatted = insights.FormattedMeetingTime,
+            RecurringMeetingPercentage = insights.RecurringTime?.PercentageOfScheduledTime ?? 0,
+            RecurringMeetingTimeFormatted = insights.RecurringTime?.FormattedDuration ?? "0m",
+            FocusBlockDurationFormatted = insights.LongestFocusBlock?.FormattedDuration ?? "0m",
+            FocusBlockDayOfWeek = insights.LongestFocusBlock?.DayOfWeek ?? "None",
+            FocusBlockWindowFormatted = (insights.LongestFocusBlock?.Start.HasValue == true && insights.LongestFocusBlock?.End.HasValue == true)
+                ? $"{insights.LongestFocusBlock.Start.Value:h:mm tt} – {insights.LongestFocusBlock.End.Value:h:mm tt}"
+                : null,
+            BusiestDayOfWeek = insights.BusiestDay?.DayOfWeek ?? "None",
+            BusiestDayScheduledTimeFormatted = insights.BusiestDay?.FormattedScheduledTime ?? "0m",
+            BusiestDayEventCount = insights.BusiestDay?.EventCount ?? 0,
+            TotalConflictsCount = insights.ScheduleHealth?.TotalConflicts ?? 0,
+            TotalConflictDurationFormatted = insights.ScheduleHealth?.FormattedConflictDuration ?? "0m",
+            CrossAccountConflictsCount = insights.ScheduleHealth?.CrossAccountConflictsCount ?? 0,
+            SameAccountConflictsCount = insights.ScheduleHealth?.SameAccountConflictsCount ?? 0,
+            ConflictFreeDaysCount = insights.ScheduleHealth?.ConflictFreeDaysCount ?? 0,
+            MostConflictedDay = insights.ScheduleHealth?.MostConflictedDay ?? "None",
+            HasTodayConflict = insights.ScheduleHealth?.HasTodayConflict ?? false,
+            TotalTasksCount = insights.Tasks?.Count ?? 0,
+            PendingTasksCount = insights.Tasks?.Count(t => !t.IsCompleted) ?? 0,
+            CompletedTasksCount = insights.Tasks?.Count(t => t.IsCompleted) ?? 0,
+            TitlesIncluded = includeTitles
+        };
+
+        if (insights.ScheduleHealth?.Conflicts != null)
+        {
+            foreach (var c in insights.ScheduleHealth.Conflicts)
+            {
+                snapshot.Conflicts.Add(new ConflictSummarySnapshot
+                {
+                    OverlapStart = c.OverlapStart,
+                    OverlapEnd = c.OverlapEnd,
+                    OverlapDurationFormatted = c.FormattedOverlapDuration,
+                    IsCrossAccount = c.IsCrossAccount,
+                    EventATitle = includeTitles ? c.EventA?.Title : null,
+                    EventBTitle = includeTitles ? c.EventB?.Title : null
+                });
+            }
+        }
+
+        if (insights.Tasks != null)
+        {
+            foreach (var t in insights.Tasks)
+            {
+                snapshot.Tasks.Add(new TaskSummarySnapshot
+                {
+                    DueDate = t.DueDate,
+                    DueDateFormatted = t.DueDate?.ToString("MMM d, h:mm tt"),
+                    IsCompleted = t.IsCompleted,
+                    IsAllDay = t.IsAllDay,
+                    Title = includeTitles ? t.Title : null
+                });
+            }
+        }
+
+        var eventsByDay = (insights.Events ?? [])
+            .GroupBy(e => e.Start.Date)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        var tasksByDay = (insights.Tasks ?? [])
+            .Where(t => t.DueDate.HasValue)
+            .GroupBy(t => t.DueDate!.Value.Date)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        var conflictsByDay = (insights.ScheduleHealth?.Conflicts ?? [])
+            .GroupBy(c => c.OverlapStart.Date)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        var cur = insights.StartDate.Date;
+        var end = insights.EndDate.Date;
+
+        while (cur <= end)
+        {
+            var dayEvents = eventsByDay.TryGetValue(cur, out var de) ? de : [];
+            var dayTasks = tasksByDay.TryGetValue(cur, out var dt) ? dt : [];
+            var dayConflicts = conflictsByDay.TryGetValue(cur, out var dc) ? dc : [];
+
+            var timedDayEvents = dayEvents.Where(e => !e.IsAllDay).ToList();
+            var allDayEvents = dayEvents.Where(e => e.IsAllDay).ToList();
+
+            var scheduledDuration = TimeSpan.Zero;
+            var meetingDuration = TimeSpan.Zero;
+            var hasAttendeeData = timedDayEvents.Any(e => e.AttendeeCount > 1);
+
+            foreach (var e in timedDayEvents)
+            {
+                scheduledDuration += e.Duration;
+                if (hasAttendeeData ? e.AttendeeCount > 1 : true)
+                {
+                    meetingDuration += e.Duration;
+                }
+            }
+
+            var daySnapshot = new DayScheduleSnapshot
+            {
+                Date = new DateTimeOffset(cur, insights.StartDate.Offset),
+                DayOfWeek = cur.ToString("dddd"),
+                DateFormatted = cur.ToString("MMM d"),
+                EventCount = dayEvents.Count,
+                TimedEventCount = timedDayEvents.Count,
+                AllDayEventCount = allDayEvents.Count,
+                ScheduledTimeFormatted = FormatDuration(scheduledDuration),
+                MeetingTimeFormatted = FormatDuration(meetingDuration),
+                ConflictCount = dayConflicts.Count,
+                TaskCount = dayTasks.Count
+            };
+
+            var conflictedEventIds = new HashSet<string>();
+            foreach (var c in dayConflicts)
+            {
+                if (!string.IsNullOrEmpty(c.EventA?.Id)) conflictedEventIds.Add(c.EventA.Id);
+                if (!string.IsNullOrEmpty(c.EventB?.Id)) conflictedEventIds.Add(c.EventB.Id);
+            }
+
+            foreach (var ev in dayEvents.OrderBy(e => e.Start))
+            {
+                daySnapshot.TimeBlocks.Add(new EventBlockSnapshot
+                {
+                    Start = ev.Start,
+                    End = ev.End,
+                    DurationFormatted = FormatDuration(ev.Duration),
+                    TimeRangeFormatted = ev.IsAllDay ? "All Day" : $"{ev.Start:h:mm tt} – {ev.End:h:mm tt}",
+                    IsAllDay = ev.IsAllDay,
+                    IsMeeting = ev.AttendeeCount > 1,
+                    IsRecurring = ev.IsRecurring,
+                    IsConflicted = conflictedEventIds.Contains(ev.Id),
+                    Title = includeTitles ? ev.Title : null
+                });
+            }
+
+            snapshot.Days.Add(daySnapshot);
+            cur = cur.AddDays(1);
+        }
+
+        return snapshot;
+    }
 }
